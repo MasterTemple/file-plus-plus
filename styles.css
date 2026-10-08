@@ -811,12 +811,47 @@ body.fpp-appearance-open .mobile-navbar {
 	flex: 1;
 	font-weight: var(--font-semibold);
 }
+/* An annotation: its label as a tag in the provider's color, then its text in its sentence */
+.fpp-provider-panel {
+	--fpp-provider-accent: var(--fpp-provider-color, var(--interactive-accent));
+}
+.fpp-provider-item {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	margin: 2px 0;
+	padding-block: var(--size-4-1);
+	border: 1px solid transparent;
+	border-radius: var(--radius-m);
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.fpp-provider-item:hover {
+	border-color: color-mix(in srgb, var(--fpp-provider-accent) 40%, transparent);
+}
+.fpp-provider-item.is-active {
+	background: color-mix(in srgb, var(--fpp-provider-accent) 12%, transparent);
+	border-color: color-mix(in srgb, var(--fpp-provider-accent) 60%, transparent);
+}
 .fpp-provider-label {
-	font-weight: var(--font-medium);
+	padding: 0 var(--size-4-2);
+	border-radius: var(--radius-s);
+	background: color-mix(in srgb, var(--fpp-provider-accent) 16%, transparent);
+	color: var(--fpp-provider-accent);
+	font-weight: var(--font-semibold);
+	white-space: nowrap;
 }
 .fpp-provider-text {
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+.fpp-provider-text mark {
+	padding: 0 1px;
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--fpp-provider-accent) 24%, transparent);
+	color: var(--text-normal);
 }
 
 /* ---------- Appearance scope (all books / this book) ---------- */

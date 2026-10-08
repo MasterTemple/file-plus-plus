@@ -96,6 +96,8 @@ export interface AnnotationProvider<T = unknown> {
 	id: string;
 	/** Sidebar tab and menu label, e.g. "Bible references". */
 	name: string;
+	/** The annotations in a sentence ("Filter …", "No … in this book"), e.g. "Bible references". Default: the name in lowercase. */
+	noun?: string;
 	/** Lucide icon name for the sidebar tab. */
 	icon?: string;
 	/** Default color for annotations without one (palette name or CSS color). */

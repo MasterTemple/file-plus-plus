@@ -103,6 +103,7 @@ export interface FppSettings {
 	openIn: OpenTarget;
 	/** Where the source note opens when clicking a highlight. */
 	openNoteIn: OpenTarget;
+	/** Whether new views opened with the sidebar, before that was kept on each device (`sidebarState`). */
 	sidebarOpen: boolean;
 	/** Mobile: open the plugin's menu when a selection settles. */
 	selectionBar: boolean;

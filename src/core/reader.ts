@@ -38,6 +38,20 @@ export interface AnnotationLayerOptions {
 	hidden?: boolean;
 }
 
+/** An annotation of a layer, as `describeLayer` lists it. */
+export interface LayerItem {
+	spec: HighlightSpec;
+	/** The annotated text (null when its locator doesn't resolve). */
+	text: string | null;
+	tocItem: TocItem | null;
+	/** With `context`: the text of its block before and after it. */
+	before?: string;
+	after?: string;
+}
+
+/** The elements whose text is an annotation's context: paragraphs, list items, cells, and the like. */
+const BLOCKS = 'p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, td, th, pre, figcaption, div';
+
 /** An annotation of a layer under the pointer. */
 export interface LayerHit<T = unknown> {
 	layer: string;
@@ -619,6 +633,9 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	/** A collapsed range at the start of the first block intersecting the top of the viewport. */
 	protected currentAnchor(): Range | null {
 		if (!this.sections.length) return null;
+		// Hidden (a tab in the background) or detached, everything measures 0 and the search below
+		// would land on the last section: there's no position to read
+		if (!this.scroller.isConnected || !this.scroller.clientHeight) return null;
 		// Probe just below the 16px gap that scrollToRange(position: 'top') leaves, so restores are stable.
 		const top = this.scroller.getBoundingClientRect().top + 18;
 		// First section extending below the top edge (sections are separated by margins).
@@ -984,9 +1001,10 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 
 	/**
 	 * A layer's annotations in document order, each with its text and chapter. Annotations whose locator
-	 * doesn't resolve come last, with null text.
+	 * doesn't resolve come last, with null text. With `context`, each also has up to that many
+	 * characters of its paragraph (or cue, or other block) before and after it.
 	 */
-	describeLayer(id: string): { spec: HighlightSpec; text: string | null; tocItem: TocItem | null }[] {
+	describeLayer(id: string, opts: { context?: number } = {}): LayerItem[] {
 		const layer = this.layers.get(id);
 		if (!layer) return [];
 		this.resolveLayer(layer);
@@ -1001,14 +1019,39 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			set(b, y.range!);
 			return a.compareBoundaryPoints(Range.START_TO_START, b) || a.compareBoundaryPoints(Range.END_TO_END, b);
 		});
-		const out: { spec: HighlightSpec; text: string | null; tocItem: TocItem | null }[] = items.map((i) => {
+		const out: LayerItem[] = items.map((i) => {
 			set(a, i.range!);
-			return { spec: i.spec, text: a.toString().replace(/\s+/g, ' ').trim(), tocItem: this.tocItemAt(i.range!) };
+			const item: LayerItem = { spec: i.spec, text: a.toString().replace(/\s+/g, ' ').trim(), tocItem: this.tocItemAt(i.range!) };
+			if (opts.context) Object.assign(item, this.textAround(i.range!, opts.context, b));
+			return item;
 		});
 		for (const i of layer.items) if (!i.range) out.push({ spec: i.spec, text: null, tocItem: null });
 		a.detach();
 		b.detach();
 		return out;
+	}
+
+	/** Up to `n` characters of a range's block before and after it, whitespace collapsed (`scratch` is reused) */
+	private textAround(r: StaticRange, n: number, scratch: Range): { before: string; after: string } {
+		const blockOf = (node: Node) => (node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement)?.closest(BLOCKS) ?? null;
+		const start = blockOf(r.startContainer);
+		const end = blockOf(r.endContainer);
+		let before = '';
+		let after = '';
+		if (start) {
+			scratch.setStart(start, 0);
+			scratch.setEnd(r.startContainer, r.startOffset);
+			before = scratch.toString().replace(/\s+/g, ' ').trimStart();
+		}
+		if (end) {
+			scratch.setStart(r.endContainer, r.endOffset);
+			scratch.setEnd(end, end.childNodes.length);
+			after = scratch.toString().replace(/\s+/g, ' ').trimEnd();
+		}
+		// Cut at a word, with an ellipsis where the block goes on
+		if (before.length > n) before = `…${before.slice(before.indexOf(' ', before.length - n) + 1)}`;
+		if (after.length > n) after = `${after.slice(0, after.lastIndexOf(' ', n) > 0 ? after.lastIndexOf(' ', n) : n)}…`;
+		return { before, after };
 	}
 
 	private resolveLayer(layer: Layer): void {

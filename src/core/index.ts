@@ -14,6 +14,7 @@ export {
 	type AnnotationLayerOptions,
 	type HighlightSpec,
 	type LayerHit,
+	type LayerItem,
 	type Location,
 	type ReaderOptions,
 	type RenderedSection,

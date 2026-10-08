@@ -1,5 +1,5 @@
-import { type SearchResult, type TocItem } from '../core';
-import { Component, MarkdownRenderer, Platform, debounce, setIcon, type TFile } from 'obsidian';
+import { type HighlightSpec, type SearchResult, type TocItem } from '../core';
+import { Component, MarkdownRenderer, Menu, Platform, debounce, setIcon, type HoverParent, type HoverPopover, type TFile } from 'obsidian';
 import type { HighlightEntry } from '../annotator/highlight-index';
 import { layerId, type Annotation, type AnnotationProvider } from './api';
 import { titleCase } from './settings';
@@ -41,7 +41,13 @@ export class Sidebar {
 			setIcon(close, 'x');
 			close.addEventListener('click', () => this.view.toggleSidebar(false));
 		}
-		this.showTab('toc');
+		this.showTab(this.view.plugin.sidebarState().tab);
+	}
+
+	/** A tab the user picked: new views open on it */
+	private chooseTab(id: Tab): void {
+		this.showTab(id);
+		this.view.plugin.rememberSidebar({ tab: id });
 	}
 
 	private get noun(): string {
@@ -53,7 +59,9 @@ export class Sidebar {
 		// Provider tabs go after the built-in ones, before the mobile close button.
 		this.header.insertBefore(button, this.header.querySelector('.fpp-sidebar-close'));
 		setIcon(button, icon);
-		button.addEventListener('click', () => this.showTab(id));
+		button.addEventListener('click', () => this.chooseTab(id));
+		// The tab last chosen, once it's there (another plugin's tab is added after the view opens)
+		if (this.tabs.size > 0 && this.activeTab !== id && id === this.view.plugin.sidebarState().tab) queueMicrotask(() => this.showTab(id));
 		const panel = this.body.createDiv(`fpp-panel fpp-panel-${id.replace(/[^\w-]/g, '_')}`);
 		this.tabs.set(id, { button, panel });
 		return panel;
@@ -295,7 +303,7 @@ export class Sidebar {
 		const el = this.resultsEl.querySelector(`[data-index="${i}"]`) as HTMLElement | null;
 		el?.addClass('is-active');
 		el?.scrollIntoView({ block: 'nearest' });
-		if (fromClick && this.view.sidebarIsOverlay()) this.view.toggleSidebar(false);
+		if (fromClick && this.view.sidebarIsOverlay()) this.view.toggleSidebar(false, false);
 	}
 
 	// --- Highlights ------------------------------------------------------------------------------
@@ -473,14 +481,53 @@ export class Sidebar {
 		item.addEventListener('click', (ev) => {
 			if ((ev.target as HTMLElement).closest('a')) return; // links inside comments
 			this.view.navigate(e.locator);
-			if (this.view.sidebarIsOverlay()) this.view.toggleSidebar(false);
+			if (this.view.sidebarIsOverlay()) this.view.toggleSidebar(false, false);
 		});
 	}
 }
 
+/**
+ * Puts the hover preview of a row in the list beside the list, not below the row, where it would
+ * cover the rows under it. Obsidian's page preview makes the popover a little later (its `staticPos`,
+ * which isn't in the API's types, is where it goes, also when it moves it again as its content loads)
+ */
+function placeBeside(parent: HoverParent, before: HoverPopover | null, row: HTMLElement): void {
+	const win = row.win;
+	let frames = 0;
+	const look = () => {
+		const popover = parent.hoverPopover as (HoverPopover & { targetEl?: HTMLElement; staticPos?: { x: number; y: number } | null }) | null;
+		if (!popover || popover === before || popover.targetEl !== row) {
+			if (++frames < 60) win.requestAnimationFrame(look);
+			return;
+		}
+		const list = row.closest('.fpp-search-results') ?? row;
+		const r = list.getBoundingClientRect();
+		const top = row.getBoundingClientRect().top;
+		const gap = 8;
+		// The side with more room (the list is usually at the left of the text)
+		const right = win.innerWidth - r.right >= r.left;
+		const place = () => {
+			const width = popover.hoverEl.offsetWidth;
+			const x = right ? r.right + gap : Math.max(gap, r.left - gap - width);
+			popover.staticPos = { x, y: top };
+			if (popover.hoverEl.isConnected) {
+				popover.hoverEl.style.left = `${x}px`;
+				popover.hoverEl.style.top = `${Math.max(gap, Math.min(top, win.innerHeight - popover.hoverEl.offsetHeight - gap))}px`;
+			}
+		};
+		place();
+		// Its width is known once it shows
+		if (!right) win.requestAnimationFrame(place);
+	};
+	win.requestAnimationFrame(look);
+}
+
+/** How much of the text around an annotation its row shows, on each side */
+const CONTEXT = 60;
+
 /** A provider's tab: its annotations in document order, grouped by chapter, with a filter. */
 class ProviderPanel {
-	private items: { spec: { id: string; locator: string }; annotation: Annotation; text: string | null; chapter: string }[] = [];
+	private items: { spec: HighlightSpec; annotation: Annotation; text: string | null; before: string; after: string; chapter: string }[] = [];
 	private shown: typeof this.items = [];
 	private current = -1;
 	private filter = '';
@@ -506,6 +553,11 @@ class ProviderPanel {
 		return this.items.length;
 	}
 
+	/** The annotations in a sentence: "Bible references" */
+	private get noun(): string {
+		return this.provider.noun ?? this.provider.name.toLowerCase();
+	}
+
 	/** The layer changed: re-read it now if the tab is showing, otherwise when it's opened. */
 	update(hidden: boolean): void {
 		this.hidden = hidden;
@@ -517,16 +569,20 @@ class ProviderPanel {
 		const reader = this.view.reader;
 		if (this.stale && reader) {
 			this.stale = false;
-			this.items = reader.describeLayer(layerId(this.provider.id)).map((d) => ({
+			this.items = reader.describeLayer(layerId(this.provider.id), { context: CONTEXT }).map((d) => ({
 				spec: d.spec,
 				annotation: d.spec.data as Annotation,
 				text: d.text,
+				before: d.before ?? '',
+				after: d.after ?? '',
 				chapter: d.tocItem?.label ?? (d.text === null ? 'Location not found' : ''),
 			}));
 			this.current = -1;
 		}
 		const el = this.el;
 		el.empty();
+		el.addClass('fpp-provider-panel');
+		if (this.provider.color) el.style.setProperty('--fpp-provider-color', this.provider.color);
 		const bar = el.createDiv('fpp-provider-toolbar');
 		bar.createDiv({ cls: 'fpp-provider-name', text: this.provider.name });
 		const eye = bar.createDiv({ cls: 'clickable-icon', attr: { 'aria-label': this.hidden ? `Show in the ${this.view.plugin.format.noun}` : `Hide in the ${this.view.plugin.format.noun}` } });
@@ -543,7 +599,7 @@ class ProviderPanel {
 		});
 
 		const row = el.createDiv('fpp-search-row search-input-container');
-		const input = row.createEl('input', { type: 'search', attr: { placeholder: `Filter ${this.provider.name.toLowerCase()}…`, spellcheck: 'false' } });
+		const input = row.createEl('input', { type: 'search', attr: { placeholder: `Filter ${this.noun}…`, spellcheck: 'false' } });
 		input.value = this.filter;
 		const nav = el.createDiv('fpp-search-toggles');
 		this.infoEl = nav.createDiv('fpp-search-info');
@@ -595,7 +651,7 @@ class ProviderPanel {
 		this.rendered = 0;
 		this.updateInfo();
 		this.updateCollapseAll();
-		if (!this.items.length) this.listEl!.createDiv({ cls: 'fpp-empty', text: `No ${this.provider.name.toLowerCase()} in this ${this.view.plugin.format.noun}.` });
+		if (!this.items.length) this.listEl!.createDiv({ cls: 'fpp-empty', text: `No ${this.noun} in this ${this.view.plugin.format.noun}.` });
 		this.renderMore(200);
 	}
 
@@ -669,16 +725,48 @@ class ProviderPanel {
 			const item = this.shown[i];
 			const row = frag.createDiv('fpp-search-result fpp-provider-item');
 			row.dataset.index = String(i);
-			row.createDiv({ cls: 'fpp-provider-label', text: item.annotation.label });
-			const text = item.text ?? '(location not found)';
-			// The annotated text, unless it only repeats the label
-			if (text.toLowerCase() !== item.annotation.label.toLowerCase())
-				row.createDiv({ cls: 'fpp-provider-text', text: text.length > 160 ? `${text.slice(0, 160)}…` : text });
+			row.createSpan({ cls: 'fpp-provider-label', text: item.annotation.label });
+			if (item.text === null) row.createDiv({ cls: 'fpp-provider-text', text: '(location not found)' });
+			else if (item.before || item.after || item.text.toLowerCase() !== item.annotation.label.toLowerCase()) {
+				// The annotated text in its sentence (or the text alone, unless it only repeats the label)
+				const text = row.createDiv('fpp-provider-text');
+				text.append(item.before);
+				text.createEl('mark', { text: item.text.length > 160 ? `${item.text.slice(0, 160)}…` : item.text });
+				text.append(item.after);
+			}
+			row.addEventListener('contextmenu', (e) => this.menu(e, item));
+			if (!Platform.isMobile && this.provider.preview) row.addEventListener('mouseover', (e) => this.preview(e, row, item));
 			row.addEventListener('click', () => this.select(i, true));
 			if (i === this.current) row.addClass('is-active');
 		}
 		group.items!.appendChild(frag);
 		group.filled = end;
+	}
+
+	/** The menu the annotation has in the document: save it as a highlight, and the provider's items. */
+	private menu(e: MouseEvent, item: (typeof this.items)[number]): void {
+		e.preventDefault();
+		const menu = new Menu();
+		this.view.addAnnotationItems(menu, [{ layer: layerId(this.provider.id), spec: item.spec }]);
+		menu.showAtMouseEvent(e);
+	}
+
+	/** The provider's preview of the annotation (Obsidian's page preview), as in the document. */
+	private preview(e: MouseEvent, row: HTMLElement, item: (typeof this.items)[number]): void {
+		const layer = layerId(this.provider.id);
+		const link = this.provider.preview?.(item.annotation, this.view.annotationContext(layer, item.annotation));
+		if (!link) return;
+		const parent = this.view as unknown as HoverParent;
+		const before = parent.hoverPopover;
+		this.view.app.workspace.trigger('hover-link', {
+			event: e,
+			source: this.view.plugin.annotationHoverSource,
+			hoverParent: this.view,
+			targetEl: row,
+			linktext: link,
+			sourcePath: this.view.file?.path ?? '',
+		});
+		placeBeside(parent, before, row);
 	}
 
 	step(delta: number): void {
@@ -699,6 +787,6 @@ class ProviderPanel {
 		row?.addClass('is-active');
 		row?.scrollIntoView({ block: 'nearest' });
 		this.view.navigate(this.shown[i].spec.locator);
-		if (fromClick && this.view.sidebarIsOverlay()) this.view.toggleSidebar(false);
+		if (fromClick && this.view.sidebarIsOverlay()) this.view.toggleSidebar(false, false);
 	}
 }

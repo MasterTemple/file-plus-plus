@@ -162,7 +162,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		this.marginComments = this.addChild(new MarginComments(this));
 		this.annotationTip = new AnnotationTip(this.mainEl);
 		this.register(() => this.annotationTip.destroy());
-		this.toggleSidebar(!Platform.isMobile && this.plugin.settings.sidebarOpen, false);
+		// As the sidebar was last opened or closed (on this kind of device)
+		this.toggleSidebar(this.plugin.sidebarState().open, false);
 
 		this.offIndex = (() => {
 			const ref = this.plugin.annotator.index.on('changed', (paths) => {
@@ -232,7 +233,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			await reader.render();
 			if (token !== this.loadToken) return;
 			this.bindReader(reader);
-			if (this.sidebarIsOverlay()) this.toggleSidebar(false, false);
+			// Over the text, the sidebar opens as it was last left on phones, and closed in narrow panes on desktop
+			if (this.sidebarIsOverlay() && !this.reloading) this.toggleSidebar(Platform.isMobile && this.plugin.sidebarState().open, false);
 			this.chapterEl.setText(this.title());
 			this.sidebar.setToc(reader.toc);
 			this.refreshHighlights();
@@ -365,7 +367,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	goToToc(item: TocItem): void {
 		this.reader?.goTo(item);
-		if (this.sidebarIsOverlay()) this.toggleSidebar(false);
+		if (this.sidebarIsOverlay()) this.toggleSidebar(false, false);
 	}
 
 	/** True when the sidebar floats over the text (mobile, or a narrow pane). */
@@ -726,8 +728,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			if (axis === 'y' && readerScrolled()) e.stopPropagation();
 			if (mine) {
 				e.stopPropagation();
-				if (mine === 'open' && dx > 50) this.toggleSidebar(true, false);
-				else if (mine === 'close' && dx < -50) this.toggleSidebar(false, false);
+				if (mine === 'open' && dx > 50) this.toggleSidebar(true);
+				else if (mine === 'close' && dx < -50) this.toggleSidebar(false);
 				mine = null;
 			}
 		};
@@ -1148,16 +1150,17 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	// Panels
 	// --------------------------------------------------------------------------------------------
 
+	/**
+	 * Opens or closes the sidebar (toggles it without `open`). With `persist`, for the user's own
+	 * opening or closing (not closing the drawer after going to a result), new views open the same way.
+	 */
 	toggleSidebar(open?: boolean, persist = true): void {
 		const isOpen = this.mainEl.hasClass('fpp-sidebar-open');
 		const next = open ?? !isOpen;
 		this.mainEl.toggleClass('fpp-sidebar-open', next);
 		// Obsidian's mobile navbar overlaps the drawer's bottom; hide it while the drawer is open.
 		this.contentEl.doc.body.toggleClass('fpp-drawer-open', next && this.sidebarIsOverlay());
-		if (persist && !Platform.isMobile && open === undefined) {
-			this.plugin.settings.sidebarOpen = next;
-			this.plugin.saveSettings();
-		}
+		if (persist) this.plugin.rememberSidebar({ open: next });
 	}
 
 	openSearch(): void {

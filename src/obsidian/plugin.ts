@@ -12,6 +12,16 @@ import { SourceView, type SourceMode } from './source-view';
 import type { FileFormat } from './format';
 import { FPP_API_READY, FPP_API_UNLOAD, type AnnotationProvider, type FileApi } from './api';
 
+
+/** The sidebar as last left (see `sidebarState`) */
+export interface SidebarState {
+	open: boolean;
+	tab: string;
+}
+
+/** Shared by every file-plus-plus plugin (the build's prefix rewriting leaves it alone) */
+const SIDEBAR_KEY = 'file-plus-plus:sidebar';
+
 export type CopyTarget = CopyFormat | 'link' | 'alt-link' | 'text';
 
 /**
@@ -305,6 +315,21 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+	}
+
+	/**
+	 * Whether the sidebar is open and on which tab (`toc`, `search`, `highlights`, `provider:<id>`), as
+	 * the user last left it in any file-plus-plus plugin's view: new views open the same way. Kept in
+	 * Obsidian's local storage, unprefixed so every plugin shares it, and per device (a drawer over
+	 * the text on a phone, a column on a computer).
+	 */
+	sidebarState(): SidebarState {
+		const saved = (this.app.loadLocalStorage(SIDEBAR_KEY) ?? {}) as Partial<SidebarState>;
+		return { open: saved.open ?? (!Platform.isMobile && this.settings.sidebarOpen), tab: saved.tab ?? 'toc' };
+	}
+
+	rememberSidebar(change: Partial<SidebarState>): void {
+		this.app.saveLocalStorage(SIDEBAR_KEY, { ...this.sidebarState(), ...change });
 	}
 
 	/** This device's id, kept in Obsidian's local storage (per vault and device; not synced). */
