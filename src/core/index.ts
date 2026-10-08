@@ -8,6 +8,7 @@ export { TextIndex, foldString, foldChar, BLOCK, SKIP, type Section } from './te
 export { searchIndex, type SearchMatch, type SearchOptions } from './search';
 export {
 	DocumentReader,
+	yieldToBrowser,
 	rangeText,
 	type FlashOptions,
 	type AnnotationLayerOptions,

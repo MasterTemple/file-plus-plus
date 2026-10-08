@@ -363,6 +363,105 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return tf ? serializeTextFragment(tf) : null;
 	}
 
+	// ---------------------------------------------------------------------------------------------
+	// Units
+	// ---------------------------------------------------------------------------------------------
+	//
+	// Formats whose own locators name whole units (a transcript's cues, a Bible's verses) list where
+	// each unit starts; the library then finds the units a selection covers and, when it covers only
+	// part of them, the exact words as a text fragment searched from the first unit
+	// (`t=109s-120s:~:text=…`, `v=3:16:~:text=…`). Resolving searches the words within the units,
+	// and falls back to the whole units when they aren't there (the text changed).
+
+	/**
+	 * The elements where each unit starts, in document order: the unit itself (a cue's span) or a
+	 * marker before its text (a verse number). Empty: the format has no units. Keep it cached.
+	 */
+	protected unitElements(): readonly Element[] {
+		return [];
+	}
+
+	/**
+	 * Where unit `i` ends: by default where the next unit starts, when it is in the same section,
+	 * else the end of the section's body. A unit that is an element's content ends after it instead.
+	 */
+	protected unitEnd(i: number): [Node, number] {
+		const units = this.unitElements();
+		const el = units[i];
+		const next = units[i + 1];
+		const body = this.sectionOf(el)?.body ?? null;
+		if (next && (!body || body.contains(next))) return before(next);
+		if (body) return [body, body.childNodes.length];
+		return [el.parentNode!, Array.prototype.indexOf.call(el.parentNode!.childNodes, el) + 1];
+	}
+
+	/**
+	 * The unit a point is in: the last one starting at or before it. A point between units (after
+	 * one ends, before the next starts) is in the next one when it starts a range (`end` false) and
+	 * in the one before when it ends a range; a range ending exactly where a unit starts ends in the
+	 * unit before. Points before every unit are in the first. -1 without units.
+	 */
+	unitAt(node: Node, offset: number, end = false): number {
+		const units = this.unitElements();
+		if (!units.length) return -1;
+		const point = this.doc.createRange();
+		// Both ends: a range made by the document and moved into the shadow root must collapse there
+		// (happy-dom keeps the end in the document)
+		point.setStart(node, offset);
+		point.setEnd(node, offset);
+		let lo = 0;
+		let hi = units.length;
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			const side = point.comparePoint(...before(units[mid]));
+			// Units starting before the point (or at it, unless the point ends a range)
+			if (side < 0 || (!end && side === 0)) lo = mid + 1;
+			else hi = mid;
+		}
+		const i = Math.max(0, lo - 1);
+		// Past the end of unit i (its end comes before the point)
+		if (!end && lo > 0 && i + 1 < units.length && point.comparePoint(...this.unitEnd(i)) < 0) return i + 1;
+		return i;
+	}
+
+	/** The range over units `first` through `last`. */
+	unitRange(first: number, last: number): Range | null {
+		const units = this.unitElements();
+		if (!units[first] || !units[last] || last < first) return null;
+		const range = this.doc.createRange();
+		range.setStart(...before(units[first]));
+		range.setEnd(...this.unitEnd(last));
+		return range;
+	}
+
+	/**
+	 * The units a range covers (a collapsed range: the unit it is in), and when it covers only part of
+	 * them, the exact words: a text fragment (`:~:text=…`) searched from the first unit
+	 */
+	unitsOfRange(range: Range): { first: number; last: number; text?: string } | null {
+		const first = this.unitAt(range.startContainer, range.startOffset);
+		if (first === -1) return null;
+		if (range.collapsed) return { first, last: first };
+		const last = Math.max(first, this.unitAt(range.endContainer, range.endOffset, true));
+		const units = this.unitRange(first, last);
+		if (!units) return { first, last };
+		const [s, e] = this.textIndex.rangeToOffsets(range);
+		const [us, ue] = this.textIndex.rangeToOffsets(units);
+		if (s <= us && e >= ue) return { first, last };
+		const text = this.textFragmentFromRange(range, units);
+		return text ? { first, last, text } : { first, last };
+	}
+
+	/**
+	 * Units `first` through `last`, narrowed to the words of `text` (a `:~:text=` directive) when it
+	 * is given and found within them; otherwise the whole units
+	 */
+	resolveUnits(first: number, last: number, text?: string | null): Range | null {
+		const range = this.unitRange(first, last);
+		if (!range || !text) return range;
+		return this.resolveTextFragment(text, range) ?? range;
+	}
+
 	/** The section a node is in. */
 	protected sectionOf(node: Node): RenderedSection | null {
 		const el = (node.nodeType === 1 ? (node as Element) : node.parentElement)?.closest('[data-fpp-section]');
@@ -1174,7 +1273,14 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	}
 }
 
-function yieldToBrowser(): Promise<void> {
+/** The place right before a node, in its parent */
+function before(node: Node): [Node, number] {
+	const parent = node.parentNode!;
+	return [parent, Array.prototype.indexOf.call(parent.childNodes, node)];
+}
+
+/** Lets the browser paint and handle input during long work (rendering a long document in steps). */
+export function yieldToBrowser(): Promise<void> {
 	return new Promise((r) => setTimeout(r, 0));
 }
 

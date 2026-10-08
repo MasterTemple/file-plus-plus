@@ -49,6 +49,22 @@ export const textFragmentScheme: LocatorScheme = {
 	isRange: () => true,
 };
 
+/**
+ * A locator's trailing text-fragment directive, for formats that add the exact words to their own
+ * locators (`t=109s-120s:~:text=whale` → `t=109s-120s` and `:~:text=whale`). The directive stays
+ * percent-encoded (it is a text fragment); `%3A~%3A` (from an encoded link) is read as `:~:`.
+ */
+export function splitTextDirective(locator: string): { base: string; text: string | null } {
+	const m = /:~:|%3A~%3A/i.exec(locator);
+	if (!m) return { base: locator, text: null };
+	return { base: locator.slice(0, m.index), text: `:~:${locator.slice(m.index + m[0].length)}` };
+}
+
+/** A locator with the exact words appended (see `splitTextDirective`). */
+export function withTextDirective(base: string, text?: string | null): string {
+	return text ? `${base}${text.startsWith(':~:') ? text : `:~:${text}`}` : base;
+}
+
 /** `&key=value` parameters. */
 export function parseParams(s: string): Record<string, string> {
 	const params: Record<string, string> = {};
