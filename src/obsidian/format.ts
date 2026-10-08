@@ -1,5 +1,6 @@
 import type { DocumentReader, LocatorScheme, ParsedLocator, ReaderOptions, ReaderSettings, SelectionInfo, TocItem } from '../core';
 import type { App, TFile } from 'obsidian';
+import type { ExtractedText } from './api';
 
 /** Title and author of a document, for templates, file names and the view's title. */
 export interface DocumentInfo {
@@ -45,6 +46,12 @@ export interface FileFormat<Doc = unknown, R extends DocumentReader = DocumentRe
 	position: PositionScheme<any>;
 
 	load(app: App, file: TFile): Promise<Doc>;
+	/**
+	 * A document's text without rendering it, for annotation providers (`FileApi.extractText`). A
+	 * locator may be the format's unit locator plus the exact words (`t=…:~:text=…`), which resolve
+	 * within those units.
+	 */
+	extractText?(app: App, file: TFile): Promise<ExtractedText>;
 	/** Release what `load` allocated (blob URLs…). */
 	unload(doc: Doc): void;
 	info(doc: Doc, file: TFile): DocumentInfo;

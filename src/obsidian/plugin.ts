@@ -13,7 +13,7 @@ import { DocumentView } from './view';
 import { ImportModal } from './import';
 import { SourceView, type SourceMode } from './source-view';
 import type { FileFormat } from './format';
-import type { Annotation, AnnotationProvider, FileApi } from './api';
+import { FPP_API_READY, FPP_API_UNLOAD, type Annotation, type AnnotationProvider, type FileApi } from './api';
 
 export type CopyTarget = CopyFormat | 'link' | 'alt-link' | 'text';
 
@@ -47,6 +47,11 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	/** Page preview source for links into documents (hovering highlights). */
 	get hoverSource(): string {
 		return this.manifest.id;
+	}
+
+	/** Page preview source for annotation providers' previews (plain hover). */
+	get annotationHoverSource(): string {
+		return `${this.manifest.id}-annotations`;
 	}
 
 	/** Page preview source for links in the editor (plain hover). */
@@ -107,6 +112,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.registerHoverLinkSource(this.hoverSource, { display: `${this.manifest.name} highlights`, defaultMod: true });
 		// Obsidian's own editor previews need Ctrl/Cmd; this source (toggleable under Page preview)
 		// previews links in the editor on plain hover, like Reading view does.
+		this.registerHoverLinkSource(this.annotationHoverSource, { display: `${this.manifest.name}: previews of other plugins' annotations`, defaultMod: false });
 		this.registerHoverLinkSource(this.editorHoverSource, { display: `${this.manifest.name}: ${this.format.name} links in the editor`, defaultMod: false });
 		this.registerEditorHover();
 		this.addSettingTab(new FppSettingTab(this.app, this as unknown as FilePlusPlusPlugin));
@@ -120,7 +126,10 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.updatePreviews();
 		this.api = this.createApi();
 		await this.onLoaded();
-		this.app.workspace.onLayoutReady(() => this.app.workspace.trigger(`${this.manifest.id}:api-ready`, this.api));
+		this.app.workspace.onLayoutReady(() => {
+			this.app.workspace.trigger(`${this.manifest.id}:api-ready`, this.api);
+			this.app.workspace.trigger(FPP_API_READY, this.api);
+		});
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -130,6 +139,13 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	protected baseApi(): FileApi {
 		return {
 			version: 1,
+			pluginId: this.manifest.id,
+			formatName: this.format.name,
+			extensions: this.format.extensions,
+			extractText: async (file) => {
+				if (!this.format.extractText || !this.format.extensions.includes(file.extension.toLowerCase())) return null;
+				return this.format.extractText(this.app, file);
+			},
 			registerAnnotationProvider: (provider) => {
 				const p = provider as AnnotationProvider<unknown>;
 				this.providers.set(p.id, p);
@@ -294,6 +310,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 
 	override onunload(): void {
 		this.app.workspace.trigger(`${this.manifest.id}:api-unload`);
+		this.app.workspace.trigger(FPP_API_UNLOAD, this.api);
 		this.providers.clear();
 		this.calloutStyle?.remove();
 		this.unregisterEmbeds?.();

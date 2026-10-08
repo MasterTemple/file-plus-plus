@@ -420,6 +420,23 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		reader.on('annotation-hover', (e, hits) => {
 			if (Platform.isMobile) return;
 			const key = hits.map((h) => `${h.layer}:${h.spec.id}`).join('|');
+			// A provider's preview (Obsidian's page preview) instead of the tooltip
+			const preview = this.annotationPreview(hits);
+			if (preview) {
+				this.annotationTip.hide();
+				if (key === this.lastPreview) return;
+				this.lastPreview = key;
+				this.app.workspace.trigger('hover-link', {
+					event: e,
+					source: this.plugin.annotationHoverSource,
+					hoverParent: this,
+					targetEl: this.hostEl,
+					linktext: preview,
+					sourcePath: this.file?.path ?? '',
+				});
+				return;
+			}
+			this.lastPreview = key;
 			this.annotationTip.hover(e, key, () =>
 				this.groupHits(hits)
 					.flatMap((g) => g.annotations.map((a) => (g.provider.tooltip ? g.provider.tooltip(a, this.annotationContext(g.layer, a)) : a.label)))
@@ -548,6 +565,21 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			text: range?.toString().replace(/\s+/g, ' ').trim() ?? '',
 			chapter: (range && this.reader?.tocItemAt(range)?.label) || null,
 		};
+	}
+
+	/** The annotations last previewed (so moving within them doesn't preview again) */
+	private lastPreview = '';
+
+	/** The first link a provider previews for these annotations, if any. */
+	private annotationPreview(hits: LayerHit[]): string | null {
+		for (const g of this.groupHits(hits)) {
+			if (!g.provider.preview) continue;
+			for (const a of g.annotations) {
+				const link = g.provider.preview(a, this.annotationContext(g.layer, a));
+				if (link) return link;
+			}
+		}
+		return null;
 	}
 
 	private onAnnotationClick(e: MouseEvent, hits: LayerHit[]): void {
