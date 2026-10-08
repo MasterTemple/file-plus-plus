@@ -1,19 +1,16 @@
-import { formatLocator, type DocumentReader, type ReaderSettings, type SelectionInfo } from '../core';
+import { formatLocator, type DocumentReader, type ReaderSettings } from '../core';
 import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, parseLinktext, type PaneType, type ViewState, type Workspace, type OpenViewState } from 'obsidian';
 import { around } from './patch';
-import { HighlightIndex, resolveFile, type HighlightEntry } from './highlight-index';
-import { formatLink, linkAt, linkTimestamp, renderTemplate, setCalloutColor, setLinkColor, touchLink, UPDATED_PARAM } from './link-utils';
-import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AnnotationMode, type AppearancePlatform, type CopyAction, type Orientation, type CopyFormat, type FppSettings, type OpenTarget } from './settings';
-import { Annotations } from './annotations';
-import { askForComment, confirmDeleteHighlight } from './comment-modal';
-import { getComment, removeHighlight, setComment } from './comment-utils';
+import { resolveFile } from '../annotator/highlight-index';
+import { formatLink, linkAt } from './link-utils';
+import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type OpenTarget } from './settings';
+import { Annotator } from '../annotator/annotator';
 import { DocumentEmbed, registerEmbeds, type EmbedContext } from './embed';
 import { FppSettingTab } from './setting-tab';
 import { DocumentView } from './view';
-import { ImportModal } from './import';
 import { SourceView, type SourceMode } from './source-view';
 import type { FileFormat } from './format';
-import { FPP_API_READY, FPP_API_UNLOAD, type Annotation, type AnnotationProvider, type FileApi } from './api';
+import { FPP_API_READY, FPP_API_UNLOAD, type AnnotationProvider, type FileApi } from './api';
 
 export type CopyTarget = CopyFormat | 'link' | 'alt-link' | 'text';
 
@@ -25,13 +22,12 @@ export type CopyTarget = CopyFormat | 'link' | 'alt-link' | 'text';
 export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader = DocumentReader> extends Plugin {
 	abstract readonly format: FileFormat<Doc, R>;
 	declare settings: FppSettings;
-	index!: HighlightIndex;
-	annotations = new Annotations(this as unknown as FilePlusPlusPlugin);
+	/** The note-taking layer: highlights from links in notes, comments, annotation files, copying. */
+	readonly annotator = new Annotator<Doc, R>(this);
 	/** Annotation providers registered by other plugins, by id. */
 	readonly providers = new Map<string, AnnotationProvider<unknown>>();
 	/** For other plugins: see `api.ts`. */
 	api!: FileApi;
-	private calloutStyle: HTMLStyleElement | null = null;
 	private savePositionsTimer = 0;
 
 	/** View type of the format's files (the plugin id). */
@@ -104,7 +100,6 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 
 	override async onload(): Promise<void> {
 		await this.loadSettings();
-		this.index = new HighlightIndex(this.app, this.format.extensions, this.format.schemes);
 
 		this.registerView(this.viewType, (leaf) => this.createView(leaf));
 		this.registerExtensions(this.format.extensions, this.viewType);
@@ -120,8 +115,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.patchViewOpening();
 		this.registerIndexEvents();
 		this.registerCommands();
-		this.updateCalloutStyles();
-		this.registerBacklinkHover();
+		this.annotator.load();
 		this.watchOrientation();
 		this.updatePreviews();
 		this.api = this.createApi();
@@ -166,20 +160,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		};
 	}
 
-	/** Show or hide highlights in every open document (comments in the margin are separate); the sidebar still lists them. */
-	async setHighlightsHidden(hidden: boolean): Promise<void> {
-		this.settings.hideHighlights = hidden;
-		await this.saveSettings();
-		for (const v of this.views()) v.refreshHighlights();
-	}
 
-	/** Show or hide comments in the margin of every open document. */
-	async setMarginComments(on: boolean): Promise<void> {
-		this.settings.marginComments = on;
-		await this.saveSettings();
-		// Also re-renders the sidebar's toggle buttons.
-		for (const v of this.views()) v.refreshHighlights();
-	}
 
 	/** Show or hide a provider's annotations in documents (the sidebar still lists them). */
 	async setProviderHidden(id: string, hidden: boolean): Promise<void> {
@@ -192,43 +173,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		if (p) for (const v of this.views()) v.updateProvider(p);
 	}
 
-	/** What "Save as highlight" inserts: the chosen format, else the first one without a comment. */
-	saveFormat(): CopyTarget {
-		return this.resolveCopyAction(this.settings.saveAnnotationAs) ?? this.settings.copyFormats.find((f) => !needsComment(f.template)) ?? 'link';
-	}
 
-	/**
-	 * Turn another plugin's annotation into a real highlight: insert it into the document's annotation
-	 * file (created if needed), as the "save as" format or, with a comment, the comment format.
-	 */
-	async saveAnnotation(view: DocumentView<Doc, R>, layerId: string, annotation: Annotation, color: string | null, withComment: boolean): Promise<void> {
-		const range = view.reader?.layerRange(layerId, annotation.id);
-		const info = range && view.reader?.describeRange(range);
-		if (!info || !view.file) {
-			this.notice(`could not find this passage in the ${this.format.noun}.`);
-			return;
-		}
-		let what: CopyTarget | null;
-		let comment = '';
-		if (withComment) {
-			const c = await askForComment(this.app, info.text);
-			if (c === null) return;
-			comment = c;
-			what = this.settings.copyFormats.find((f) => needsComment(f.template)) ?? { id: '', name: 'Callout with comment', template: COMMENT_TEMPLATE };
-		} else what = this.saveFormat();
-		if (what === 'text') what = 'link';
-		const text = this.renderCopy(view, info, what, color, comment, { label: annotation.label });
-		try {
-			let ann = this.annotations.find(view.file);
-			if (!ann) {
-				ann = await this.annotations.create(view);
-				new Notice(`Created ${ann.path}`);
-			}
-			await this.addToAnnotationFile(view, ann, info, text, false);
-		} catch (e) {
-			this.notice((e as Error).message);
-		}
-	}
 
 	/** The format's file a link path points to, if any. */
 	resolveLink(path: string, sourcePath: string): TFile | null {
@@ -312,7 +257,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.app.workspace.trigger(`${this.manifest.id}:api-unload`);
 		this.app.workspace.trigger(FPP_API_UNLOAD, this.api);
 		this.providers.clear();
-		this.calloutStyle?.remove();
+		this.annotator.unload();
 		this.unregisterEmbeds?.();
 		for (const { doc } of this.documents.values()) doc.then((d) => this.format.unload(d)).catch(() => {});
 	}
@@ -487,7 +432,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 
 	/** Re-apply palette/opacity to views and callout CSS. */
 	refreshPalette(): void {
-		this.updateCalloutStyles();
+		this.annotator.updateCalloutStyles();
 		for (const v of this.views()) v.applyPalette();
 	}
 
@@ -527,30 +472,13 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		else await leaf.setViewState({ type: this.sourceViewType, state: { file, mode }, active: true });
 	}
 
-	private updateCalloutStyles(): void {
-		this.calloutStyle ??= document.head.createEl('style', { attr: { id: `${this.manifest.id}-callouts` } });
-		this.calloutStyle.textContent = this.settings.palette
-			.map((p) => {
-				const rgb = toRgb(p.color);
-				return rgb ? `.callout[data-callout-metadata="${CSS.escape(p.name)}"] { --callout-color: rgb(${rgb}); }` : '';
-			})
-			.join('\n');
-	}
 
 	// --------------------------------------------------------------------------------------------
 	// Highlight index
 	// --------------------------------------------------------------------------------------------
 
 	private registerIndexEvents(): void {
-		const { metadataCache, vault, workspace } = this.app;
-		workspace.onLayoutReady(() => {
-			const ready = () => this.index.rebuild();
-			// resolvedLinks is only complete after the initial resolve pass.
-			if ((metadataCache as any).initialized === false) this.registerEvent(metadataCache.on('resolved', ready));
-			ready();
-		});
-		this.registerEvent(metadataCache.on('changed', (file) => file.extension === 'md' && this.index.indexFile(file)));
-		this.registerEvent(metadataCache.on('deleted', (file) => this.index.removeSource(file.path, true)));
+		const { vault } = this.app;
 		// A document changed (edited as plain text, synced): re-render its open views.
 		const reloadTimers = new Map<string, number>();
 		this.registerEvent(
@@ -566,14 +494,10 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 				);
 			}),
 		);
-		let rebuildTimer = 0;
 		this.registerEvent(
 			vault.on('rename', (file, oldPath) => {
 				if (!(file instanceof TFile)) return;
-				if (file.extension === 'md') {
-					this.index.removeSource(oldPath, true);
-					this.index.indexFile(file);
-				} else if (this.format.extensions.includes(file.extension.toLowerCase())) {
+				if (this.format.extensions.includes(file.extension.toLowerCase())) {
 					const look = this.settings.bookAppearance[oldPath];
 					if (look) {
 						delete this.settings.bookAppearance[oldPath];
@@ -584,8 +508,6 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 						delete this.settings.positions[oldPath];
 						this.savePosition(file.path, pos);
 					} else if (look) this.saveSettings();
-					window.clearTimeout(rebuildTimer);
-					rebuildTimer = window.setTimeout(() => this.index.rebuild(), 1000);
 				}
 			}),
 		);
@@ -740,114 +662,10 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	// Highlight actions
 	// --------------------------------------------------------------------------------------------
 
-	/** Open the note containing a highlight's link, at the link's line. */
-	async openSource(entry: HighlightEntry, fromView?: DocumentView<Doc, R>): Promise<void> {
-		const file = this.app.vault.getFileByPath(entry.sourcePath);
-		if (!file) return;
-		const { workspace } = this.app;
-		const eState = { line: entry.position.start.line };
-		let leaf = workspace.getLeavesOfType('markdown').find((l) => (l.view as MarkdownView).file?.path === file.path) ?? null;
-		if (leaf) {
-			await workspace.revealLeaf(leaf);
-			workspace.setActiveLeaf(leaf, { focus: true });
-			leaf.setEphemeralState(eState);
-		} else {
-			const target = this.settings.openNoteIn;
-			if (target === 'current' || Platform.isPhone || !fromView) leaf = workspace.getLeaf(Platform.isPhone ? false : 'tab');
-			else if (target === 'tab') leaf = workspace.getLeaf('tab');
-			else {
-				// Prefer an existing markdown leaf in another split over creating a new one.
-				const other = workspace.getLeavesOfType('markdown').find((l) => l.getRoot() === fromView.leaf.getRoot() && l.parent !== fromView.leaf.parent);
-				leaf = other ?? workspace.createLeafBySplit(fromView.leaf, 'vertical');
-			}
-			await leaf.openFile(file, { active: true, eState });
-		}
-		const view = leaf.view;
-		if (view instanceof MarkdownView) {
-			const from = view.editor.offsetToPos(entry.position.start.offset);
-			const to = view.editor.offsetToPos(entry.position.end.offset);
-			if (view.getMode() === 'source') {
-				view.editor.setSelection(from, to);
-				view.editor.scrollIntoView({ from, to }, true);
-			}
-		}
-	}
 
-	/** Add, change or (with '') remove the comment of a highlight in its note. */
-	async setHighlightComment(entry: HighlightEntry, comment: string): Promise<void> {
-		const file = this.app.vault.getFileByPath(entry.sourcePath);
-		if (!file || comment.trim() === (entry.comment ?? '')) return;
-		let failed = false;
-		await this.app.vault.process(file, (data) => {
-			let start = entry.position.start.offset;
-			if (data.slice(start, entry.position.end.offset) !== entry.original) {
-				start = data.indexOf(entry.original);
-				if (start === -1) {
-					failed = true;
-					return data;
-				}
-			}
-			const end = start + entry.original.length;
-			const stamped = this.stamp(entry.original);
-			const next = data.slice(0, start) + stamped + data.slice(end);
-			const line = next.slice(0, start).split('\n').length - 1;
-			return setComment(next.split('\n'), line, comment, entry.color ?? null).join('\n');
-		});
-		if (failed) this.notice('could not find the link in the note (it may have changed).');
-	}
 
-	/**
-	 * Delete a highlight: its link (with the callout around it, and its comment) from the note.
-	 * Asks first when it has a comment, unless `force`.
-	 */
-	async deleteHighlight(entry: HighlightEntry, force = false): Promise<void> {
-		const file = this.app.vault.getFileByPath(entry.sourcePath);
-		if (!file) return;
-		const data = await this.app.vault.read(file);
-		const at = findLink(data, entry);
-		if (at === -1) return void this.notice('could not find the link in the note (it may have changed).');
-		const comment = getComment(data.split('\n'), data.slice(0, at).split('\n').length - 1);
-		if (comment && !force && !(await confirmDeleteHighlight(this.app, comment))) return;
-		let failed = false;
-		await this.app.vault.process(file, (d) => {
-			const start = findLink(d, entry);
-			if (start === -1) {
-				failed = true;
-				return d;
-			}
-			return removeHighlight(d, start, start + entry.original.length);
-		});
-		if (failed) this.notice('could not find the link in the note (it may have changed).');
-	}
 
-	/** Rewrite the `&color=` parameter (and enclosing callout color) of a highlight's link in its note. */
-	async setHighlightColor(entry: HighlightEntry, color: string | null): Promise<void> {
-		const file = this.app.vault.getFileByPath(entry.sourcePath);
-		if (!file) return;
-		let failed = false;
-		await this.app.vault.process(file, (data) => {
-			let start = entry.position.start.offset;
-			let end = entry.position.end.offset;
-			if (data.slice(start, end) !== entry.original) {
-				start = data.indexOf(entry.original);
-				if (start === -1) {
-					failed = true;
-					return data;
-				}
-				end = start + entry.original.length;
-			}
-			const updated = this.stamp(setLinkColor(entry.original, color));
-			const next = data.slice(0, start) + updated + data.slice(end);
-			const lineNo = next.slice(0, start).split('\n').length - 1;
-			return setCalloutColor(next.split('\n'), lineNo, color).join('\n');
-		});
-		if (failed) this.notice('could not find the link in the note (it may have changed).');
-	}
 
-	/** A highlight's link with `&updated=` set to now (when links carry timestamps). */
-	private stamp(link: string): string {
-		return this.settings.timestampInLinks ? touchLink(link) : link;
-	}
 
 	// --------------------------------------------------------------------------------------------
 	// Copying
@@ -859,14 +677,6 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		return (this.app.vault as any).getConfig?.('useMarkdownLinks') ? 'markdown' : 'wiki';
 	}
 
-	/** Build a link to a selection. `alternate` swaps the configured link type (the format's ↔ text fragment). */
-	buildLink(view: DocumentView<Doc, R>, info: SelectionInfo, color: string | null, alternate = false, extra: Record<string, string> = {}, updated?: Date | null): string {
-		const useText = (this.settings.linkType === 'text') !== alternate;
-		const locator = (useText && info.textFragment()) || info.locator;
-		const alias = renderTemplate(this.settings.aliasTemplate, { ...this.templateVars(view, info, color, ''), ...extra });
-		const params = { [UPDATED_PARAM]: this.settings.timestampInLinks ? linkTimestamp(updated ?? undefined) : undefined };
-		return this.documentLink(view.file!, locator, alias, this.settings.colorInLinks ? color : null, undefined, params);
-	}
 
 	/** A link (wiki or markdown, per settings) to a locator in a document; `params` follow the color. */
 	documentLink(file: TFile, locator: string, alias: string, color: string | null = null, sourcePath?: string, params: Record<string, string | undefined> = {}): string {
@@ -881,140 +691,24 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		return leaf?.view instanceof MarkdownView ? (leaf.view.file?.path ?? null) : null;
 	}
 
-	/** The selection's text as copied: Markdown converted from the document's HTML, or plain text. */
-	selectionText(info: SelectionInfo): string {
-		if (!this.settings.copyMarkdown) return info.text;
-		try {
-			return info.markdown() || info.text;
-		} catch (e) {
-			console.warn('[fpp] markdown conversion failed', e);
-			return info.text;
-		}
-	}
 
-	templateVars(view: DocumentView<Doc, R>, info: SelectionInfo, color: string | null, link: string): Record<string, string> {
-		const doc = view.document;
-		const meta = doc && view.file ? this.format.info(doc, view.file) : null;
-		const title = meta?.title || view.file?.basename || '';
-		return {
-			text: this.selectionText(info),
-			link,
-			color: color ?? '',
-			title,
-			book: title,
-			author: meta?.author ?? '',
-			chapter: info.tocItem?.label ?? '',
-			locator: info.locator,
-			file: view.file?.basename ?? '',
-			path: view.file?.path ?? '',
-			...this.format.templateVars?.(info, doc),
-		};
-	}
 
-	/** Resolve a copy action (`text`, `link`, `alt-link`, `format:<id>`) to what it copies. */
-	resolveCopyAction(action: CopyAction): CopyTarget | null {
-		if (action === 'text' || action === 'link' || action === 'alt-link') return action;
-		const id = action.slice('format:'.length);
-		return this.settings.copyFormats.find((f) => f.id === id) ?? null;
-	}
 
-	/**
-	 * The clipboard text for a selection (synchronous, so it can run inside a `copy` event).
-	 * `extra`: more template variables, e.g. `{{label}}` when saving another plugin's annotation.
-	 */
-	renderCopy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, comment = '', extra: Record<string, string> = {}, updated?: Date | null): string {
-		if (what === 'text') return this.selectionText(info);
-		const link = this.buildLink(view, info, color, what === 'alt-link', extra, updated);
-		return typeof what === 'string' ? link : renderTemplate(what.template, { ...this.templateVars(view, info, color, link), ...extra, comment });
-	}
 
-	/** True when copying with this target first asks for a comment ({{comment}} in the template). */
-	asksForComment(what: CopyTarget): boolean {
-		return typeof what === 'object' && needsComment(what.template);
-	}
 
-	copyLabel(what: CopyTarget): string {
-		if (what === 'text') return 'text';
-		if (what === 'link') return 'link';
-		if (what === 'alt-link') return this.settings.linkType === 'primary' ? 'text-fragment link' : `${this.format.linkTypeName} link`;
-		return what.name.toLowerCase();
-	}
 
-	/**
-	 * Copy (and/or insert into the annotation file, per its mode; `copyOnly` never inserts).
-	 * `newFileMode`: for a document without an annotation file, Insert / Both create one first.
-	 */
-	async copy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, copyOnly = false, newFileMode?: AnnotationMode): Promise<void> {
-		let comment = '';
-		if (this.asksForComment(what)) {
-			const c = await askForComment(this.app, info.text);
-			if (c === null) return;
-			comment = c;
-		}
-		const text = this.renderCopy(view, info, what, color, comment);
-		const inserts = what !== 'text' && !copyOnly && !!view.file;
-		let ann = inserts ? this.annotations.find(view.file!) : null;
-		let mode: AnnotationMode = ann ? this.annotations.mode(ann) : 'copy';
-		if (inserts && !ann && newFileMode && newFileMode !== 'copy') {
-			try {
-				ann = await this.annotations.create(view);
-				await this.annotations.setMode(ann, newFileMode);
-				new Notice(`Created ${ann.path}`);
-				mode = newFileMode;
-			} catch (e) {
-				this.notice((e as Error).message);
-				return;
-			}
-		}
-		if (mode !== 'insert') await navigator.clipboard.writeText(text);
-		if (ann && mode !== 'copy') await this.addToAnnotationFile(view, ann, info, text, mode === 'both');
-		else new Notice(`Copied ${this.copyLabel(what)} to clipboard`);
-	}
 
-	async addToAnnotationFile(view: DocumentView<Doc, R>, ann: TFile, info: SelectionInfo, text: string, copied: boolean): Promise<void> {
-		try {
-			const p = await this.annotations.insert(view, ann, info, text);
-			const where = `${ann.basename}${p.heading ? ` › ${p.heading}` : ''}`;
-			new Notice(`${copied ? 'Copied and added' : 'Added'} to ${where}${p.appended ? ' (at the end of the section)' : ''}`);
-		} catch (e) {
-			console.error('[fpp] could not add to annotation file', e);
-			this.notice(`could not add to ${ann.basename}: ${(e as Error).message}`);
-		}
-	}
 
-	/** Open (or reveal) a note, preferring another split than the document's. */
-	async openNote(file: TFile, fromView?: DocumentView<Doc, R>): Promise<void> {
-		const { workspace } = this.app;
-		const open = workspace.getLeavesOfType('markdown').find((l) => (l.view as MarkdownView).file?.path === file.path);
-		if (open) {
-			await workspace.revealLeaf(open);
-			workspace.setActiveLeaf(open, { focus: true });
-			return;
-		}
-		const other = fromView && workspace.getLeavesOfType('markdown').find((l) => l.getRoot() === fromView.leaf.getRoot() && l.parent !== fromView.leaf.parent);
-		const leaf = Platform.isPhone || !fromView ? workspace.getLeaf('tab') : (other ?? workspace.createLeafBySplit(fromView.leaf, 'vertical'));
-		await leaf.openFile(file, { active: true });
-	}
 
-	/** Create (if needed) and open the annotation file of the document in `view`. */
-	async openAnnotationFile(view: DocumentView<Doc, R>): Promise<void> {
-		if (!view.file) return;
-		const existed = this.annotations.find(view.file);
-		try {
-			const file = existed ?? (await this.annotations.create(view));
-			if (!existed) {
-				new Notice(`Created ${file.path}`);
-				view.refreshHighlights();
-			}
-			await this.openNote(file, view);
-		} catch (e) {
-			this.notice((e as Error).message);
-		}
-	}
 
 	// --------------------------------------------------------------------------------------------
 	// Commands
 	// --------------------------------------------------------------------------------------------
+
+	/** A command callback that runs only while one of this plugin's views (with a reader) is active. */
+	withViewCommand(fn: (v: DocumentView<Doc, R>) => void): (checking: boolean) => boolean {
+		return this.withView(fn);
+	}
 
 	/** A command callback that runs only while one of this plugin's views (with a reader) is active. */
 	protected withView(fn: (v: DocumentView<Doc, R>) => void): (checking: boolean) => boolean {
@@ -1031,7 +725,6 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		const name = this.format.name;
 		this.addCommand({ id: 'toggle-sidebar', name: 'Toggle table of contents / search sidebar', checkCallback: withView((v) => v.toggleSidebar()) });
 		this.addCommand({ id: 'search', name: `Search in ${name}`, checkCallback: withView((v) => v.openSearch()) });
-		this.addCommand({ id: 'annotation-file', name: 'Open or create annotation file', checkCallback: withView((v) => this.openAnnotationFile(v)) });
 		if (this.format.plainText)
 			this.addCommand({
 				id: 'toggle-source',
@@ -1056,34 +749,6 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return true;
 				},
 			});
-		this.addCommand({ id: 'import-json', name: 'Import highlights from JSON…', callback: () => new ImportModal(this.app, this as unknown as FilePlusPlusPlugin).open() });
-		// A .json file's menu offers to import it.
-		this.registerEvent(
-			this.app.workspace.on('file-menu', (menu, file) => {
-				if (!(file instanceof TFile) || file.extension.toLowerCase() !== 'json') return;
-				menu.addItem((i) =>
-					i
-						.setTitle(`Import highlights into ${this.manifest.name}…`)
-						.setIcon('import')
-						.onClick(async () => new ImportModal(this.app, this as unknown as FilePlusPlusPlugin, await this.app.vault.read(file)).open()),
-				);
-			}),
-		);
-		this.addCommand({
-			id: 'toggle-highlights',
-			name: 'Show / hide highlights',
-			callback: () => void this.setHighlightsHidden(!this.settings.hideHighlights),
-		});
-		this.addCommand({
-			id: 'toggle-margin-comments',
-			name: 'Toggle comments in the margin',
-			callback: () => {
-				void this.setMarginComments(!this.settings.marginComments);
-				const shown = this.settings.marginComments;
-				const v = this.activeView();
-				if (shown && v?.reader && !v.marginComments.visible) this.notice(v.plugin.index.get(v.file?.path ?? '').some((e) => e.comment) ? 'the pane is too narrow for comments in the margin.' : `this ${this.format.noun} has no comments yet.`);
-			},
-		});
 		this.addCommand({ id: 'appearance', name: 'Reading appearance', checkCallback: withView((v) => v.toggleAppearance()) });
 		this.addCommand({ id: 'font-increase', name: 'Increase font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.min(48, this.readerSettings(v.file?.path).fontSize + 1) })) });
 		this.addCommand({ id: 'font-decrease', name: 'Decrease font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.max(8, this.readerSettings(v.file?.path).fontSize - 1) })) });
@@ -1096,98 +761,15 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 				this.updateReaderSettingsFor(v.file?.path, { theme: order[(i + 1) % order.length] });
 			}),
 		});
-		const copyCommand = (id: string, title: string, target: () => CopyTarget | null) =>
-			this.addCommand({
-				id,
-				name: title,
-				checkCallback: (checking) => {
-					const v = this.activeView();
-					const sel = v?.reader?.getSelection();
-					const what = target();
-					if (!v || !sel || !what) return false;
-					if (!checking) this.copy(v, sel, what, v.activeColor);
-					return true;
-				},
-			});
-		copyCommand('copy-text', 'Copy selection as text', () => 'text');
-		copyCommand('copy-link', 'Copy link to selection', () => 'link');
-		copyCommand('copy-alt-link', `Copy alternate link to selection (${this.format.linkTypeName} ↔ text fragment)`, () => 'alt-link');
-		this.syncFormatCommands = () => {
-			const commands = (this.app as any).commands;
-			for (const id of this.formatCommandIds) commands?.removeCommand?.(`${this.manifest.id}:${id}`);
-			this.formatCommandIds = [];
-			for (const fmt of this.settings.copyFormats) {
-				const id = `copy-format-${fmt.id}`;
-				copyCommand(id, `Copy selection as ${fmt.name.toLowerCase()}`, () => this.settings.copyFormats.find((f) => f.id === fmt.id) ?? null);
-				this.formatCommandIds.push(id);
-			}
-		};
-		this.syncFormatCommands();
 	}
-
-	/** Re-register the per-format copy commands (after formats are added, renamed or removed). Hotkeys are kept by id. */
-	syncFormatCommands: () => void = () => {};
-	private formatCommandIds: string[] = [];
 
 	// --------------------------------------------------------------------------------------------
 	// Backlinks pane integration
 	// --------------------------------------------------------------------------------------------
 
-	/**
-	 * Hovering a match in Obsidian's Backlinks pane emphasizes the corresponding highlight in the
-	 * document (like PDF++). Best-effort: matches by source file name and link text.
-	 */
-	private registerBacklinkHover(): void {
-		let lastIds = '';
-		this.registerDomEvent(document, 'mouseover', (e) => {
-			const target = e.target as HTMLElement | null;
-			const match = target?.closest?.('.workspace-leaf-content[data-type="backlink"] .search-result-file-match, .embedded-backlinks .search-result-file-match');
-			const view = this.activeView() ?? this.views()[0];
-			if (!view?.reader || !view.file) return;
-			if (!match) {
-				if (lastIds) view.reader.setHoveredHighlights([]);
-				lastIds = '';
-				return;
-			}
-			const result = match.closest('.search-result');
-			const fileEl = result?.querySelector('.search-result-file-title .tree-item-inner') ?? result?.querySelector('.search-result-file-title');
-			const basename = (fileEl?.textContent ?? '').trim();
-			const text = match.textContent ?? '';
-			const entries = this.index.get(view.file.path).filter((en) => en.sourcePath.split('/').pop()?.replace(/\.md$/, '') === basename);
-			// Match rows show the raw markdown line, so the link source identifies the highlight.
-			let hits = entries.filter((en) => text.includes(en.original.slice(0, 48)));
-			if (!hits.length) hits = entries.filter((en) => en.displayText && text.includes(en.displayText));
-			const ids = hits.map((h) => h.id);
-			if (ids.join('|') !== lastIds) {
-				lastIds = ids.join('|');
-				view.reader.setHoveredHighlights(ids);
-				const r = ids.length ? view.reader.highlightRange(ids[0]) : null;
-				if (r) view.reader.scrollToRange(r, { position: 'center' });
-			}
-		});
-	}
 }
 
-function toRgb(color: string): string | null {
-	const ctx = document.createElement('canvas').getContext('2d');
-	if (!ctx) return null;
-	ctx.fillStyle = '#000';
-	ctx.fillStyle = color;
-	const v = ctx.fillStyle as string;
-	const m = /^#([0-9a-f]{6})$/i.exec(v);
-	if (m) {
-		const n = parseInt(m[1], 16);
-		return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
-	}
-	const r = /rgba?\(([^)]+)\)/.exec(v);
-	return r ? r[1].split(',').slice(0, 3).join(',') : null;
-}
 
-/** Offset of a highlight's link in its note's current text (at its indexed position, else anywhere), or -1. */
-function findLink(data: string, entry: HighlightEntry): number {
-	const { start, end } = entry.position;
-	return data.slice(start.offset, end.offset) === entry.original ? start.offset : data.indexOf(entry.original);
-}
 
 /** A name for this device in the settings ("iPhone", the computer's host name, …). */
 function defaultDeviceName(): string {

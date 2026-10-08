@@ -1,10 +1,10 @@
 import { flattenToc, parseLocator, textFragmentScheme, type SelectionInfo } from '../core';
 import { TFile, normalizePath, parseLinktext } from 'obsidian';
 import { insertAnnotation, type Ordering, type Placement } from './annotation-utils';
-import { linksIn, renderTemplate } from './link-utils';
-import type { FilePlusPlusPlugin } from './plugin';
-import { ANNOTATION_MODES, type AnnotationMode } from './settings';
-import type { DocumentView } from './view';
+import { linksIn, renderTemplate } from '../obsidian/link-utils';
+import type { FilePlusPlusPlugin } from '../obsidian/plugin';
+import { ANNOTATION_MODES, type AnnotationMode } from '../obsidian/settings';
+import type { DocumentView } from '../obsidian/view';
 
 /**
  * Annotation files: one markdown file per document with a heading per TOC entry. New annotations from

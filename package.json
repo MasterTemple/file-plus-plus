@@ -6,7 +6,9 @@
   "exports": {
     "./core": "./src/core/index.ts",
     "./obsidian": "./src/obsidian/index.ts",
-    "./notes": "./src/obsidian/notes.ts",
+    "./viewer": "./src/obsidian/viewer.ts",
+    "./annotator": "./src/annotator/index.ts",
+    "./notes": "./src/annotator/notes.ts",
     "./build": "./build/plugin.ts",
     "./styles.css": "./styles.css"
   },

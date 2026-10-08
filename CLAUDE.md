@@ -18,20 +18,27 @@ src/core/       no Obsidian imports
   margin.ts     Margin (`reader.margin`): notes beside the text, Google Docs style — light-DOM elements slotted into a column in the scroller, stacked without overlap; moves the text left, hides itself when too narrow
   lines.ts      line/column locators (L12C5-L14C3) for line-based formats
   text-index.ts, search.ts, text-fragment.ts, markdown.ts (range → Markdown), settings.ts (themes, base CSS)
-src/obsidian/
+src/obsidian/    the viewer (`file-plus-plus/viewer`): knows nothing of notes
   format.ts     FileFormat: everything a plugin tells the library about its format
-  plugin.ts     FilePlusPlusPlugin: link interception, copy/templates, highlight actions, annotation files, appearance, commands, API
-  view.ts       DocumentView (subclassable: buildExtraUi, onReaderReady, onNavigate, onTeardown, extendSelectionMenu, extendHighlightMenu)
+  plugin.ts     FilePlusPlusPlugin: views, link interception, takeover, previews/embeds, appearance, positions, providers API, commands; owns `annotator`
+  view.ts       DocumentView (subclassable: buildExtraUi, onReaderReady, onNavigate, onTeardown, extendSelectionMenu, extendHighlightMenu); owns `annotations` (a ViewAnnotator)
   source-view.ts SourceView: the raw file, monospace with line numbers, `mode` read (divs) or edit (CodeMirror 6 from Obsidian: `@codemirror/*` are externals, devDependencies pinned to Obsidian's versions) (formats with `plainText`); `toggleSource(leaf, mode)` swaps views in the same tab
   embed.ts      DocumentEmbed (subclassable) for ![[file#…]] and hover previews
-  import.ts     ImportModal + importHighlights: JSON → annotation files (opens each document's view to resolve passages, dedupes by resolved passage + comment); parsing in import-utils.ts (pure)
-  margin-comments.ts  MarginComments: highlight comments and providers' `note`s as cards in `reader.margin`
-  sidebar.ts, setting-tab.ts, appearance.ts, highlight-index.ts, annotations.ts, comment-*.ts, annotation-tip.ts
-  notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)
+  api.ts        FileApi, annotation providers (`preview`, `extractText`), `file-plus-plus:api-ready`
+  sidebar.ts, setting-tab.ts, appearance.ts, annotation-tip.ts, link-utils.ts (link syntax, shared)
   patch.ts      around(): method patching that tolerates other plugins patching the same method
+  viewer.ts / index.ts  exports: the viewer / everything (`file-plus-plus/obsidian`)
+src/annotator/  the note-taking layer (`file-plus-plus/annotator`): links in notes are highlights
+  annotator.ts  Annotator (`plugin.annotator`): the highlight index and its events, highlight actions (open source, comment, color, delete), copying and templates, annotation files, saving provider annotations, Backlinks hover, its commands
+  view-annotator.ts  ViewAnnotator (`view.annotations`): drawing highlights, margin comments, the highlight menu, comment editing, mobile gestures on highlights, the copy/insert row
+  highlight-index.ts, annotations.ts (annotation files), comment-*.ts, margin-comments.ts
+  import.ts     ImportModal + importHighlights: JSON → annotation files (opens each document's view to resolve passages, dedupes by resolved passage + comment); parsing in import-utils.ts (pure)
+  notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)
 build/plugin.ts buildPlugin(): esbuild + prefix rewrite + styles.css (library's, then the plugin's)
 scripts/        obsidian-headless.sh, cdp.ts, cdp-input.ts, install.sh (run from a plugin's folder)
 ```
+
+**Viewer and annotator.** The viewer (`src/obsidian/`) must not depend on the annotator except where they are composed (`plugin.ts`, `view.ts`, `sidebar.ts`, `setting-tab.ts`); annotator code reaches the viewer through `plugin` / `view`. View members marked `@internal (the annotator)` are for `ViewAnnotator`. A separate annotator++ package becomes worthwhile when a plugin wants the viewer without notes.
 
 ## The prefix
 

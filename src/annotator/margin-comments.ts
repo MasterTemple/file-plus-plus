@@ -1,8 +1,8 @@
 import type { MarginNote } from '../core';
 import { Component, MarkdownRenderer, Menu, setIcon } from 'obsidian';
 import type { HighlightEntry } from './highlight-index';
-import type { Annotation, AnnotationProvider } from './api';
-import type { DocumentView } from './view';
+import type { Annotation, AnnotationProvider } from '../obsidian/api';
+import type { DocumentView } from '../obsidian/view';
 
 /** A provider's annotations that have a `note`, as last fetched by the view. */
 export interface ProviderNotes {
@@ -45,7 +45,7 @@ export class MarginComments extends Component {
 		const notes: MarginNote[] = [];
 		const seen = new Set<string>();
 		const file = this.view.file;
-		const annPath = (file && this.view.plugin.annotations.find(file)?.path) ?? null;
+		const annPath = (file && this.view.plugin.annotator.annotations.find(file)?.path) ?? null;
 		for (const e of highlights) {
 			if (!e.comment) continue;
 			const id = `hl:${e.id}`;
@@ -154,7 +154,7 @@ export class MarginComments extends Component {
 			note.setAttr('aria-label', e.heading ? `${e.sourcePath} › ${e.heading}` : e.sourcePath);
 			note.addEventListener('click', (ev) => {
 				ev.stopPropagation();
-				void view.plugin.openSource(e, view);
+				void view.plugin.annotator.openSource(e, view);
 			});
 		}
 		if (meta && e.updated) {
@@ -170,7 +170,7 @@ export class MarginComments extends Component {
 			});
 		};
 		action('pencil', 'Edit comment', () => void view.editComment(e));
-		action('file-text', `Open in "${noteName}"`, () => void view.plugin.openSource(e, view));
+		action('file-text', `Open in "${noteName}"`, () => void view.plugin.annotator.openSource(e, view));
 		this.bindCard(el, `hl:${e.id}`, [e.id], (menu) => view.addHighlightItems(menu, [e]));
 		el.addEventListener('dblclick', (ev) => {
 			if ((ev.target as HTMLElement).closest('a, .fpp-mc-actions')) return;

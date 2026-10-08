@@ -1,10 +1,10 @@
 import { type SearchResult, type TocItem } from '../core';
 import { Component, MarkdownRenderer, Platform, debounce, setIcon, type TFile } from 'obsidian';
-import type { HighlightEntry } from './highlight-index';
+import type { HighlightEntry } from '../annotator/highlight-index';
 import { layerId, type Annotation, type AnnotationProvider } from './api';
 import { titleCase } from './settings';
 import type { DocumentView } from './view';
-import { timeAgo } from './margin-comments';
+import { timeAgo } from '../annotator/margin-comments';
 
 /** `toc`, `search`, `highlights`, or `provider:<id>` for another plugin's annotations. */
 type Tab = string;
@@ -317,22 +317,22 @@ export class Sidebar {
 		el.empty();
 		const { plugin, reader, file } = this.view;
 		const s = plugin.settings;
-		const ann = file ? plugin.annotations.find(file) : null;
+		const ann = file ? plugin.annotator.annotations.find(file) : null;
 		const inAnn = (e: HighlightEntry) => !!ann && e.sourcePath === ann.path;
 
 		const bar = el.createDiv('fpp-hl-toolbar');
 		const btn = bar.createEl('button', { cls: 'fpp-hl-annotation-button' });
 		setIcon(btn.createSpan(), 'notebook-pen');
 		btn.createSpan({ text: ann ? 'Open annotation file' : 'Create annotation file' });
-		btn.addEventListener('click', () => plugin.openAnnotationFile(this.view));
+		btn.addEventListener('click', () => plugin.annotator.openAnnotationFile(this.view));
 		const hidden = s.hideHighlights;
 		const eye = bar.createDiv({ cls: 'clickable-icon fpp-hl-eye', attr: { 'aria-label': hidden ? `Show highlights in the ${plugin.format.noun}` : `Hide highlights in the ${plugin.format.noun}` } });
 		setIcon(eye, hidden ? 'eye-off' : 'eye');
-		eye.addEventListener('click', () => void plugin.setHighlightsHidden(!hidden));
+		eye.addEventListener('click', () => void plugin.annotator.setHighlightsHidden(!hidden));
 		const margin = s.marginComments;
 		const comments = bar.createDiv({ cls: 'clickable-icon fpp-hl-eye', attr: { 'aria-label': margin ? 'Hide comments in the margin' : 'Show comments in the margin' } });
 		setIcon(comments, margin ? 'message-square-text' : 'message-square-off');
-		comments.addEventListener('click', () => void plugin.setMarginComments(!margin));
+		comments.addEventListener('click', () => void plugin.annotator.setMarginComments(!margin));
 
 		const counts = { all: this.hlEntries.length, annotation: this.hlEntries.filter(inAnn).length, other: this.hlEntries.filter((e) => !inAnn(e)).length };
 		const filters = el.createDiv('fpp-segmented fpp-hl-filters');
@@ -467,7 +467,7 @@ export class Sidebar {
 		note.setAttr('aria-label', e.sourcePath);
 		note.addEventListener('click', (ev) => {
 			ev.stopPropagation();
-			this.view.plugin.openSource(e, this.view);
+			this.view.plugin.annotator.openSource(e, this.view);
 		});
 		if (e.updated) meta.createSpan({ cls: 'fpp-hl-time', text: timeAgo(e.updated), attr: { 'aria-label': `Updated ${e.updated.toLocaleString()}` } });
 		item.addEventListener('click', (ev) => {

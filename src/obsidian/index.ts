@@ -1,17 +1,3 @@
-export * from './format';
-export * from './api';
-export { FilePlusPlusPlugin, type CopyTarget } from './plugin';
-export { DocumentView } from './view';
-export { SourceView } from './source-view';
-export { DocumentEmbed, type EmbedContext } from './embed';
-export { HighlightIndex, resolveFile, type HighlightEntry } from './highlight-index';
-export { Annotations } from './annotations';
-export * from './annotation-utils';
-export * from './comment-utils';
-export * from './link-utils';
-export * from './settings';
-export { around } from './patch';
-export { askForComment, confirmDeleteHighlight } from './comment-modal';
-export { buildAppearanceControls, type AppearanceTarget } from './appearance';
-export { ImportModal, importHighlights, resolveBooks, type BookImportResult, type ImportSummary } from './import';
-export * from './import-utils';
+/** Everything: the viewer (this folder) and the annotator (`../annotator`), as plugins use them. */
+export * from './viewer';
+export * from '../annotator';

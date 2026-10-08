@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parseLinktext } from './linktext';
-import { findPlacement, headingLabel, insertAnnotation, insertAt, type Ordering } from '../src/obsidian/annotation-utils';
+import { findPlacement, headingLabel, insertAnnotation, insertAt, type Ordering } from '../src/annotator/annotation-utils';
 import { linksIn } from '../src/obsidian/link-utils';
 
 // A toy format: `#n=<number>` locators, ordered by number. Text fragments resolve through `tf`.

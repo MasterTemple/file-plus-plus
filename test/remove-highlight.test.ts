@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { removeHighlight } from '../src/obsidian/comment-utils';
+import { removeHighlight } from '../src/annotator/comment-utils';
 
 const LINK = '[[B.epub#epubcfi(/6/4!/4/2,/1:0,/1:5)|B]]';
 const remove = (data: string, occurrence = 0) => {

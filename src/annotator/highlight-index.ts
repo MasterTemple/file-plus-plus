@@ -1,7 +1,7 @@
 import { isRangeLocator, parseLocator, type LocatorScheme } from '../core';
 import { headingLabel, parseHeadings } from './annotation-utils';
 import { getComment } from './comment-utils';
-import { parseLinkTimestamp, UPDATED_PARAM } from './link-utils';
+import { parseLinkTimestamp, UPDATED_PARAM } from '../obsidian/link-utils';
 import { Events, TFile, parseLinktext, type App, type CachedMetadata, type Pos, type ReferenceCache } from 'obsidian';
 
 export interface HighlightEntry {

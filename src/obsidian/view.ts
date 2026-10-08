@@ -1,14 +1,14 @@
 import { type DocumentReader, type HighlightSpec, type LayerHit, type SelectionInfo, type TocItem } from '../core';
 import { FileView, Menu, Notice, Platform, Scope, TFile, setIcon, type MenuItem, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
-import type { HighlightEntry } from './highlight-index';
-import { ANNOTATION_MODES, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, type AnnotationMode, type HighlightGestureAction } from './settings';
+import type { HighlightEntry } from '../annotator/highlight-index';
+import { SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, type AnnotationMode, type HighlightGestureAction } from './settings';
 import type { CopyTarget, FilePlusPlusPlugin } from './plugin';
 import { AppearancePanel } from './appearance';
 import { Sidebar } from './sidebar';
-import { CommentCard } from './comment-card';
-import { askForComment } from './comment-modal';
+import { CommentCard } from '../annotator/comment-card';
+import { ViewAnnotator } from '../annotator/view-annotator';
 import { AnnotationTip } from './annotation-tip';
-import { MarginComments, type ProviderNotes } from './margin-comments';
+import { MarginComments, type ProviderNotes } from '../annotator/margin-comments';
 import { layerId, type Annotation, type AnnotationContext, type AnnotationProvider } from './api';
 
 /** Annotations under the pointer, grouped by their provider. */
@@ -37,13 +37,15 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	private chapterEl!: HTMLElement;
 	private progressEl!: HTMLElement;
 	private paletteEl!: HTMLElement;
-	private sidebar!: Sidebar;
+	/** @internal (the annotator) */
+	sidebar!: Sidebar;
 	private searchNavEl!: HTMLElement;
 	commentCard!: CommentCard;
 	/** Comments beside the text (see settings: `marginComments`). */
 	marginComments!: MarginComments;
 	/** Providers' annotations that have notes (shown in the margin), by layer. */
-	private providerNotes = new Map<string, ProviderNotes>();
+	/** @internal (the annotator) */
+	providerNotes = new Map<string, ProviderNotes>();
 	private appearance!: AppearancePanel;
 	private pendingSubpath: string | null = null;
 	/** Whether the pending jump flashes its passage (a link does; a position restored from history doesn't). */
@@ -51,6 +53,9 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	private loadToken = 0;
 	private offIndex: (() => void) | null = null;
 	private annotationTip!: AnnotationTip;
+
+	/** Highlights from notes, comments, the highlight menu (the annotator's part of the view). */
+	readonly annotations = new ViewAnnotator<Doc, R>(this);
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -160,10 +165,10 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		this.toggleSidebar(!Platform.isMobile && this.plugin.settings.sidebarOpen, false);
 
 		this.offIndex = (() => {
-			const ref = this.plugin.index.on('changed', (paths) => {
+			const ref = this.plugin.annotator.index.on('changed', (paths) => {
 				if (this.file && paths.has(this.file.path)) this.refreshHighlights();
 			});
-			return () => this.plugin.index.offref(ref);
+			return () => this.plugin.annotator.index.offref(ref);
 		})();
 		this.registerEvent(this.app.workspace.on('css-change', () => this.reader?.updateSettings({})));
 		// Dragging the tab into another window moves our DOM into a different document: rebuild the
@@ -394,7 +399,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 				const menu = new Menu();
 				this.addHighlightItems(menu, entries);
 				menu.showAtMouseEvent(e);
-			} else this.plugin.openSource(entries[0], this);
+			} else this.plugin.annotator.openSource(entries[0], this);
 		});
 		reader.on('highlight-hover', (e, specs) => {
 			// Touch screens emit a mouse move for every tap; hover cards/previews are desktop-only.
@@ -494,23 +499,28 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	// Highlights
 	// --------------------------------------------------------------------------------------------
 
+
+
 	refreshHighlights(): void {
-		if (!this.reader || !this.file) return;
-		const all = this.plugin.index.get(this.file.path);
-		const entries = this.plugin.settings.noColor === 'none' ? all.filter((e) => e.color) : all;
-		const specs: HighlightSpec<HighlightEntry>[] = entries.map((e) => ({ id: e.id, locator: e.locator, color: e.color, data: e }));
-		this.reader.setHighlights(specs);
-		this.reader.setHighlightsHidden(this.plugin.settings.hideHighlights);
-		this.sidebar.setHighlights(all);
-		this.refreshMargin();
+		this.annotations.refreshHighlights();
 	}
 
 	/** Show (or hide) comments in the margin, per settings; when there is no room they show on hover. */
 	refreshMargin(): void {
-		if (!this.reader?.isRendered || !this.file) return;
-		const shown = new Set(this.reader.getHighlights().map((h) => h.id));
-		const entries = this.plugin.index.get(this.file.path).filter((e) => shown.has(e.id));
-		this.marginComments.update(entries, [...this.providerNotes.values()]);
+		this.annotations.refreshMargin();
+	}
+
+	/** Mobile gestures on highlights (see settings). Several overlapping highlights open the menu. */
+	runHighlightGesture(action: HighlightGestureAction, entries: HighlightEntry[], at: { x: number; y: number }): void {
+		this.annotations.runHighlightGesture(action, entries, at);
+	}
+
+	async editComment(entry: HighlightEntry): Promise<void> {
+		await this.annotations.editComment(entry);
+	}
+
+	addHighlightItems(menu: Menu, entries: HighlightEntry[]): void {
+		this.annotations.addHighlightItems(menu, entries);
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -621,14 +631,14 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 						.setTitle('Save as highlight')
 						.setIcon('highlighter')
 						.setSection(section)
-						.onClick(() => this.plugin.saveAnnotation(this, g.layer, a, this.activeColor, false)),
+						.onClick(() => this.plugin.annotator.saveAnnotation(this, g.layer, a, this.activeColor, false)),
 				);
 				menu.addItem((i) =>
 					i
 						.setTitle('Save with comment…')
 						.setIcon('message-square-plus')
 						.setSection(section)
-						.onClick(() => this.plugin.saveAnnotation(this, g.layer, a, this.activeColor, true)),
+						.onClick(() => this.plugin.annotator.saveAnnotation(this, g.layer, a, this.activeColor, true)),
 				);
 			}
 			try {
@@ -747,53 +757,6 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		this.runHighlightGesture(this.plugin.settings.highlightHold, hits.map((h) => h.data as HighlightEntry), { x, y });
 	}
 
-	/** Mobile gestures on highlights (see settings). Several overlapping highlights open the menu. */
-	runHighlightGesture(action: HighlightGestureAction, entries: HighlightEntry[], at: { x: number; y: number }): void {
-		const entry = entries[0];
-		if (!entry || action === 'none') return;
-		if (entries.length > 1 && action !== 'select') action = 'menu';
-		switch (action) {
-			case 'open':
-				void this.plugin.openSource(entry, this);
-				break;
-			case 'comment':
-				void this.editComment(entry);
-				break;
-			case 'color':
-				this.openColorMenu(at, entry.color ?? null, (c) => {
-					this.setActiveColor(c);
-					void this.plugin.setHighlightColor(entry, c);
-				});
-				break;
-			case 'copy-link':
-				void navigator.clipboard.writeText(entry.original).then(() => new Notice('Copied link to clipboard'));
-				break;
-			case 'select': {
-				const range = this.reader?.highlightRange(entry.id);
-				const block = range && (range.startContainer.nodeType === 1 ? (range.startContainer as Element) : range.startContainer.parentElement)?.closest('p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, td, th, pre, div:not(.fpp-body):not(.fpp-section)');
-				if (!block) break;
-				const r = block.ownerDocument.createRange();
-				r.selectNodeContents(block);
-				const info = this.reader?.describeRange(r);
-				if (info) {
-					this.lastMenuLocator = info.locator;
-					this.showSelectionMenu(info);
-				}
-				break;
-			}
-			case 'menu': {
-				void this.commentCard.show(entries, 'top');
-				const menu = new Menu();
-				this.addHighlightItems(menu, entries);
-				menu.onHide(() => {
-					this.commentCard.hide();
-					this.afterMenuHidden();
-				});
-				menu.showAtPosition(at);
-				break;
-			}
-		}
-	}
 
 	/** Mobile: a double tap selects the paragraph under the finger and opens the plugin's menu. */
 	private handleTap(e: TouchEvent): boolean {
@@ -834,7 +797,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	}
 
 	private onCopy(e: ClipboardEvent): void {
-		const what = this.plugin.resolveCopyAction(this.plugin.settings.copyAction);
+		const what = this.plugin.annotator.resolveCopyAction(this.plugin.settings.copyAction);
 		if (!what || !e.clipboardData) return; // default browser copy
 		const sel = this.reader?.getSelection();
 		if (!sel) return;
@@ -843,28 +806,28 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			// Markdown as plain text; keep the document's HTML for rich-text targets.
 			const holder = sel.range.startContainer.ownerDocument!.createElement('div');
 			holder.appendChild(sel.range.cloneContents());
-			e.clipboardData.setData('text/plain', this.plugin.selectionText(sel));
+			e.clipboardData.setData('text/plain', this.plugin.annotator.selectionText(sel));
 			e.clipboardData.setData('text/html', holder.innerHTML);
 			e.preventDefault();
 			return;
 		}
-		if (this.plugin.asksForComment(what)) {
+		if (this.plugin.annotator.asksForComment(what)) {
 			// Needs a prompt first, so it can't fill this (synchronous) copy event.
 			e.preventDefault();
-			this.plugin.copy(this, sel, what, this.activeColor);
+			this.plugin.annotator.copy(this, sel, what, this.activeColor);
 			return;
 		}
-		const text = this.plugin.renderCopy(this, sel, what, this.activeColor);
+		const text = this.plugin.annotator.renderCopy(this, sel, what, this.activeColor);
 		e.clipboardData.setData('text/plain', text);
 		// Ctrl/Cmd+C always copies; it also inserts when the annotation file's mode asks for it.
-		const ann = this.file ? this.plugin.annotations.find(this.file) : null;
-		if (ann && this.plugin.annotations.mode(ann) !== 'copy') {
+		const ann = this.file ? this.plugin.annotator.annotations.find(this.file) : null;
+		if (ann && this.plugin.annotator.annotations.mode(ann) !== 'copy') {
 			e.preventDefault();
-			this.plugin.addToAnnotationFile(this, ann, sel, text, true);
+			this.plugin.annotator.addToAnnotationFile(this, ann, sel, text, true);
 			return;
 		}
 		e.preventDefault();
-		new Notice(`Copied ${this.plugin.copyLabel(what)}`);
+		new Notice(`Copied ${this.plugin.annotator.copyLabel(what)}`);
 	}
 
 	/** Re-apply jump-highlight settings to an open reader. */
@@ -890,7 +853,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 				this.setActiveColor(name);
 				const sel = this.reader?.getSelection();
 				// PDF++-like: clicking a color while text is selected copies a link in that color.
-				if (sel) this.plugin.copy(this, sel, 'link', name);
+				if (sel) this.plugin.annotator.copy(this, sel, 'link', name);
 			});
 		};
 		for (const p of this.plugin.settings.palette) add(p.name, p.color, p.name);
@@ -923,7 +886,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	 * A row of palette swatches (and "No color") as a menu item: one line that scrolls sideways
 	 * instead of wrapping. `onPick` runs without closing the menu.
 	 */
-	private addColorRow(menu: Menu, section: string, current: () => string | null, onPick: (color: string | null) => void): void {
+	/** @internal (the annotator) */
+	addColorRow(menu: Menu, section: string, current: () => string | null, onPick: (color: string | null) => void): void {
 		menu.addItem((item) => {
 			item.setSection(section);
 			const dom = (item as MenuItem & { dom?: HTMLElement }).dom;
@@ -976,7 +940,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		return this.plugin.settings.palette.find((p) => p.name === name)?.color ?? name;
 	}
 
-	private openColorMenu(at: { x: number; y: number }, checked: string | null, onPick: (color: string | null) => void): void {
+	/** @internal (the annotator) */
+	openColorMenu(at: { x: number; y: number }, checked: string | null, onPick: (color: string | null) => void): void {
 		const m = new Menu();
 		for (const c of [...this.plugin.settings.palette.map((p) => p.name), null])
 			m.addItem((i) => i.setTitle(this.colorTitle(c)).setChecked(c === checked).onClick(() => onPick(c)));
@@ -993,16 +958,16 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		const section = 'fpp-selection';
 		const label = (title: string) => menu.addItem((i) => (i.setTitle(title) as any).setIsLabel?.(true).setSection?.(section));
 		// With an annotation file, the Copy | Insert | Both row says what the items below do; otherwise they copy.
-		const ann = (!copyOnly && this.file && this.plugin.annotations.find(this.file)) || null;
+		const ann = (!copyOnly && this.file && this.plugin.annotator.annotations.find(this.file)) || null;
 		// Without an annotation file the row starts on Copy; Insert / Both create the file when an item is picked.
 		const pending: { mode: AnnotationMode } = { mode: 'copy' };
 		if (!copyOnly) this.addActiveColorRow(menu, section);
 		if (copyOnly) label('Copy');
 		else {
 			if (isParagraph) label('Paragraph');
-			this.addAnnotationModeRow(menu, ann, section, pending);
+			this.annotations.addAnnotationModeRow(menu, ann, section, pending);
 		}
-		const copy = (what: CopyTarget, color: string | null) => this.plugin.copy(this, info, what, color, copyOnly, ann ? undefined : pending.mode);
+		const copy = (what: CopyTarget, color: string | null) => this.plugin.annotator.copy(this, info, what, color, copyOnly, ann ? undefined : pending.mode);
 		for (const entry of s.selectionMenu) {
 			if (!entry.show) continue;
 			if (entry.id === 'link') {
@@ -1020,10 +985,10 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			} else if (entry.id.startsWith('format:')) {
 				const fmt = s.copyFormats.find((f) => `format:${f.id}` === entry.id);
 				if (!fmt) continue;
-				const icon = this.plugin.asksForComment(fmt) ? 'message-square-quote' : fmt.name.toLowerCase().includes('callout') ? 'quote' : 'clipboard-copy';
+				const icon = this.plugin.annotator.asksForComment(fmt) ? 'message-square-quote' : fmt.name.toLowerCase().includes('callout') ? 'quote' : 'clipboard-copy';
 				menu.addItem((i) =>
 					i
-						.setTitle(`${formatMenuLabel(fmt.name)}${this.plugin.asksForComment(fmt) ? '…' : ''}`)
+						.setTitle(`${formatMenuLabel(fmt.name)}${this.plugin.annotator.asksForComment(fmt) ? '…' : ''}`)
 						.setIcon(icon)
 						.setSection(section)
 						.onClick(() => copy(fmt, this.activeColor)),
@@ -1034,54 +999,17 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	}
 
 	/** Add the plugin's own items for a highlight to the highlight menu (in the highlight's `section`). */
+	/** @internal: lets the annotator call the (protected) hook below */
+	extendHighlightMenuFor(menu: Menu, entry: HighlightEntry, section: string): void {
+		this.extendHighlightMenu(menu, entry, section);
+	}
+
 	protected extendHighlightMenu(_menu: Menu, _entry: HighlightEntry, _section: string): void {}
 
 	/** Add the plugin's own items to the selection menu (after the copy items; not for copy-only menus). */
 	protected extendSelectionMenu(_menu: Menu, _info: SelectionInfo): void {}
 
-	/** Prompt for a highlight's comment and write it into the note. */
-	async editComment(entry: HighlightEntry): Promise<void> {
-		const quote = this.reader?.highlightRange(entry.id)?.toString().replace(/\s+/g, ' ').trim() ?? '';
-		const comment = await askForComment(this.app, quote, {
-			title: entry.comment ? 'Edit comment' : 'Add comment',
-			initial: entry.comment ?? '',
-			submit: 'Save',
-		});
-		if (comment === null) return;
-		await this.plugin.setHighlightComment(entry, comment);
-	}
 
-	/**
-	 * `[Copy | Insert | Both]`: what the selection items do with the document's annotation file. Without
-	 * one (`ann` null) the choice is kept in `pending` for this menu only.
-	 */
-	private addAnnotationModeRow(menu: Menu, ann: TFile | null, section: string, pending: { mode: AnnotationMode }): void {
-		menu.addItem((item) => {
-			item.setSection(section);
-			const dom = (item as MenuItem & { dom?: HTMLElement }).dom;
-			if (!dom) return;
-			dom.empty();
-			dom.addClass('fpp-mode-row');
-			dom.setAttr('aria-label', ann ? `When copying, for ${ann.basename}` : 'When copying (Insert and Both create an annotation file)');
-			const labels: Record<AnnotationMode, string> = { copy: 'Copy', insert: 'Insert', both: 'Both' };
-			const buttons: HTMLElement[] = [];
-			const current = ann ? this.plugin.annotations.mode(ann) : pending.mode;
-			for (const mode of ANNOTATION_MODES) {
-				const b = dom.createDiv({ cls: 'fpp-mode-button', text: labels[mode] });
-				b.toggleClass('is-active', mode === current);
-				buttons.push(b);
-				for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend'])
-					b.addEventListener(type, (e) => e.stopPropagation());
-				b.addEventListener('click', async (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					buttons.forEach((x) => x.toggleClass('is-active', x === b));
-					if (ann) await this.plugin.annotations.setMode(ann, mode);
-					else pending.mode = mode;
-				});
-			}
-		});
-	}
 
 	override onPaneMenu(menu: Menu, source: string): void {
 		super.onPaneMenu(menu, source);
@@ -1117,67 +1045,18 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 				.setIcon('message-square-text')
 				.setChecked(this.plugin.settings.marginComments)
 				.setSection('view')
-				.onClick(() => void this.plugin.setMarginComments(!this.plugin.settings.marginComments)),
+				.onClick(() => void this.plugin.annotator.setMarginComments(!this.plugin.settings.marginComments)),
 		);
-		const ann = this.plugin.annotations.find(this.file);
+		const ann = this.plugin.annotator.annotations.find(this.file);
 		menu.addItem((i) =>
 			i
 				.setTitle(ann ? 'Open annotation file' : 'Create annotation file')
 				.setIcon('notebook-pen')
 				.setSection('open')
-				.onClick(() => this.plugin.openAnnotationFile(this)),
+				.onClick(() => this.plugin.annotator.openAnnotationFile(this)),
 		);
 	}
 
-	/** Highlight menu, in the order and with the items configured in settings. */
-	addHighlightItems(menu: Menu, entries: HighlightEntry[]): void {
-		const order = this.plugin.settings.highlightMenu.filter((e) => e.show).map((e) => e.id);
-		for (const entry of entries) {
-			const section = `fpp-hl-${entry.id}`;
-			const note = entry.sourcePath.split('/').pop()?.replace(/\.md$/, '') ?? entry.sourcePath;
-			if (entries.length > 1) menu.addItem((i) => (i.setTitle(`Highlight in "${note}"`) as any).setIsLabel?.(true).setSection?.(section));
-			// Picking a color recolors the highlight right away.
-			if (order.includes('color'))
-				this.addColorRow(menu, section, () => entry.color ?? null, (c) => {
-					this.setActiveColor(c);
-					void this.plugin.setHighlightColor(entry, c);
-					menu.hide();
-				});
-			for (const id of order) {
-				if (id === 'open') menu.addItem((i) => i.setTitle(`Open in "${note}"`).setIcon('file-text').setSection(section).onClick(() => this.plugin.openSource(entry, this)));
-				else if (id === 'comment')
-					menu.addItem((i) =>
-						i
-							.setTitle(entry.comment ? 'Edit comment' : 'Add comment')
-							.setIcon(entry.comment ? 'message-square-text' : 'message-square-plus')
-							.setSection(section)
-							.onClick(() => this.editComment(entry)),
-					);
-				else if (id === 'copy-link')
-					menu.addItem((i) =>
-						i
-							.setTitle('Copy link')
-							.setIcon('link')
-							.setSection(section)
-							.onClick(async () => {
-								await navigator.clipboard.writeText(entry.original);
-								new Notice('Copied link to clipboard');
-							}),
-					);
-				else if (id === 'delete')
-					menu.addItem((i) =>
-						i
-							.setTitle('Delete highlight')
-							.setIcon('trash-2')
-							.setWarning(true)
-							.setSection(section)
-							// Shift-click deletes without asking, even when the highlight has a comment.
-							.onClick((evt) => this.plugin.deleteHighlight(entry, evt.shiftKey)),
-					);
-			}
-			this.extendHighlightMenu(menu, entry, section);
-		}
-	}
 
 	// --------------------------------------------------------------------------------------------
 	// Selection bar (mobile: there is no right-click)
@@ -1185,7 +1064,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	private selectionMenuTimer = 0;
 	/** CFI of the selection the menu was last shown for (don't re-open it for the same selection). */
-	private lastMenuLocator: string | null = null;
+	/** @internal (the annotator) */
+	lastMenuLocator: string | null = null;
 	private touching = false;
 	/** The selection our mobile menu is acting on (drawn by us while the native one is dropped). */
 	private pendingSelection: Range | null = null;
@@ -1216,7 +1096,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		}, 500);
 	}
 
-	private showSelectionMenu(info: SelectionInfo): void {
+	/** @internal (the annotator) */
+	showSelectionMenu(info: SelectionInfo): void {
 		// The OS toolbar is tied to the native selection: drop it while our menu is open and paint the
 		// selected text ourselves instead.
 		this.pendingSelection = info.range;

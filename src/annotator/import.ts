@@ -1,8 +1,8 @@
 import { Modal, Notice, Setting, TFile, type App } from 'obsidian';
 import { bookKey, commentKey, parseImport, sameText, textFragmentFor, type ImportEntry, type ParsedImport } from './import-utils';
-import { needsComment, titleCase, type CopyAction, type ImportKind } from './settings';
-import type { FilePlusPlusPlugin } from './plugin';
-import type { DocumentView } from './view';
+import { needsComment, titleCase, type CopyAction, type ImportKind } from '../obsidian/settings';
+import type { FilePlusPlusPlugin } from '../obsidian/plugin';
+import type { DocumentView } from '../obsidian/view';
 
 export interface BookImportResult {
 	file: TFile;
@@ -84,7 +84,7 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 			const reader = view.reader!;
 			const passage = (range: Range) => reader.locatorFromRange(range) ?? range.toString();
 			const seen = new Set<string>();
-			for (const h of plugin.index.get(file.path)) {
+			for (const h of plugin.annotator.index.get(file.path)) {
 				const r = reader.resolve(h.locator);
 				if (r) seen.add(`${passage(r)}\u0000${commentKey(h.comment)}`);
 			}
@@ -116,18 +116,18 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 					result.skipped++;
 					continue;
 				}
-				let what = plugin.resolveCopyAction(kind.format) ?? 'link';
+				let what = plugin.annotator.resolveCopyAction(kind.format) ?? 'link';
 				if (what === 'text' || what === 'alt-link') what = 'link';
-				items.push({ info, block: plugin.renderCopy(view, info, what, e.color, e.comment, {}, e.updated) });
+				items.push({ info, block: plugin.annotator.renderCopy(view, info, what, e.color, e.comment, {}, e.updated) });
 			}
 			if (!items.length) continue;
-			let ann = plugin.annotations.find(file);
+			let ann = plugin.annotator.annotations.find(file);
 			if (!ann) {
-				ann = await plugin.annotations.create(view);
+				ann = await plugin.annotator.annotations.create(view);
 				result.created = true;
 			}
 			result.annotationFile = ann;
-			result.added = await plugin.annotations.insertMany(view, ann, items);
+			result.added = await plugin.annotator.annotations.insertMany(view, ann, items);
 		} catch (err) {
 			console.error('[fpp] import failed for', file.path, err);
 			result.error = (err as Error).message;
@@ -287,7 +287,7 @@ export class ImportModal extends Modal {
 				a.addEventListener('click', (e) => {
 					e.preventDefault();
 					this.close();
-					void plugin.openNote(b.annotationFile!);
+					void plugin.annotator.openNote(b.annotationFile!);
 				});
 			}
 			if (b.error) li.createDiv({ cls: 'fpp-import-errors', text: `Failed: ${b.error}` });

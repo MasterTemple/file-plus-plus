@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getComment, setComment } from '../src/obsidian/comment-utils';
+import { getComment, setComment } from '../src/annotator/comment-utils';
 
 const L = (s: string) => s.split('\n');
 const J = (a: string[]) => a.join('\n');

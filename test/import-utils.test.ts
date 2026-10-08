@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { parseLocator, textFragmentScheme } from '../src/core';
-import { bookKey, commentKey, normalizeLocator, parseImport, sameText, textFragmentFor } from '../src/obsidian/import-utils';
+import { bookKey, commentKey, normalizeLocator, parseImport, sameText, textFragmentFor } from '../src/annotator/import-utils';
 
 test('parseImport: fields, aliases and wrappers', () => {
 	const json = JSON.stringify({

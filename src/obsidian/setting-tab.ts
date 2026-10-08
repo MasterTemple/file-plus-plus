@@ -138,7 +138,7 @@ export class FppSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		const s = this.plugin.settings;
 		const save = () => this.plugin.saveSettings();
-		const syncCommands = debounce(() => this.plugin.syncFormatCommands(), 800, true);
+		const syncCommands = debounce(() => this.plugin.annotator.syncFormatCommands(), 800, true);
 		const { format, manifest } = this.plugin;
 		const noun = format.noun;
 		containerEl.empty();
@@ -257,7 +257,7 @@ export class FppSettingTab extends PluginSettingTab {
 				d.addOption('link', 'Link');
 				d.addOption('alt-link', s.linkType === 'primary' ? 'Text-fragment link' : `${format.linkTypeName} link`);
 				for (const f of s.copyFormats) d.addOption(`format:${f.id}`, f.name);
-				d.setValue(this.plugin.resolveCopyAction(s.copyAction) ? s.copyAction : 'text').onChange(async (v) => {
+				d.setValue(this.plugin.annotator.resolveCopyAction(s.copyAction) ? s.copyAction : 'text').onChange(async (v) => {
 					s.copyAction = v as CopyAction;
 					await save();
 				});
@@ -308,7 +308,7 @@ export class FppSettingTab extends PluginSettingTab {
 							if (s.copyAction === `format:${fmt.id}`) s.copyAction = 'text';
 							syncMenus(s);
 							await save();
-							this.plugin.syncFormatCommands();
+							this.plugin.annotator.syncFormatCommands();
 							this.display();
 						}),
 				);
@@ -318,7 +318,7 @@ export class FppSettingTab extends PluginSettingTab {
 				s.copyFormats.push({ id: newFormatId(), name: 'New format', template: '{{text}} {{link}}' });
 				syncMenus(s);
 				await save();
-				this.plugin.syncFormatCommands();
+				this.plugin.annotator.syncFormatCommands();
 				this.display();
 			}),
 		);
@@ -342,13 +342,13 @@ export class FppSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Show highlights')
 			.setDesc(`Draw links from your notes as highlights in ${noun}s. Off: the text is left plain, but the sidebar still lists them and comments in the margin still show; hovering or selecting a comment shows its highlight. Also the eye button in the Highlights tab and the "Show / hide highlights" command.`)
-			.addToggle((t) => t.setValue(!s.hideHighlights).onChange((v) => this.plugin.setHighlightsHidden(!v)));
+			.addToggle((t) => t.setValue(!s.hideHighlights).onChange((v) => this.plugin.annotator.setHighlightsHidden(!v)));
 		new Setting(containerEl)
 			.setName('Comments in the margin')
 			.setDesc(`Show comments beside the highlighted text, like Google Docs, when the pane is wide enough (otherwise they show on hover). Independent of "Show highlights". Also: the comment button in the Highlights tab, the "Toggle comments in the margin" command and the ${noun}'s tab menu.`)
 			.addToggle((t) =>
 				t.setValue(s.marginComments).onChange(async (v) => {
-					await this.plugin.setMarginComments(v);
+					await this.plugin.annotator.setMarginComments(v);
 				}),
 			);
 		new Setting(containerEl)
@@ -436,7 +436,7 @@ export class FppSettingTab extends PluginSettingTab {
 		});
 		new Setting(containerEl)
 			.setName('When copying a selection')
-			.setDesc(`Default for ${noun}s with an annotation file. Each file can override it (the Copy / Insert / Both row in the selection menu, saved in its "${this.plugin.annotations.modeKey}" property).`)
+			.setDesc(`Default for ${noun}s with an annotation file. Each file can override it (the Copy / Insert / Both row in the selection menu, saved in its "${this.plugin.annotator.annotations.modeKey}" property).`)
 			.addDropdown((d) =>
 				d
 					.addOptions({ copy: 'Copy to clipboard', insert: 'Insert into the annotation file', both: 'Copy and insert' })
@@ -488,7 +488,7 @@ export class FppSettingTab extends PluginSettingTab {
 			.addDropdown((d) => {
 				d.addOption('link', 'Link');
 				for (const f of s.copyFormats) if (!needsComment(f.template)) d.addOption(`format:${f.id}`, f.name);
-				const current = this.plugin.saveFormat();
+				const current = this.plugin.annotator.saveFormat();
 				d.setValue(typeof current === 'string' ? current : `format:${current.id}`).onChange(async (v) => {
 					s.saveAnnotationAs = v as CopyAction;
 					await save();
