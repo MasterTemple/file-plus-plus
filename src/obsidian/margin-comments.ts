@@ -81,13 +81,19 @@ export class MarginComments extends Component {
 		this.cards.clear();
 		this.hovered.clear();
 		this.cardHover = null;
+		this.textHover = [];
 	}
 
 	/** Highlights under the pointer in the text: mark their cards. */
 	hoverHighlights(entries: HighlightEntry[]): void {
 		this.hovered = new Set(entries.map((e) => `hl:${e.id}`));
+		this.textHover = entries.map((e) => e.id);
 		this.applyHover();
+		this.syncReveal();
 	}
+
+	/** Highlights under the pointer in the text (focused too, while highlights are shown). */
+	private textHover: string[] = [];
 
 	/** Bring the card of a highlight next to its passage (a highlight was clicked). */
 	activateHighlight(entry: HighlightEntry): void {
@@ -107,6 +113,7 @@ export class MarginComments extends Component {
 		if (!reader) return;
 		const active = reader.margin.activeId;
 		const ids = [this.cardHover, active?.startsWith('hl:') ? active.slice(3) : null].filter((x): x is string => !!x);
+		if (!this.view.plugin.settings.hideHighlights) ids.push(...this.textHover);
 		reader.setFocusedHighlights(ids);
 	}
 

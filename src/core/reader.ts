@@ -8,6 +8,11 @@ import { rangeToMarkdown } from './markdown';
 import { BASE_CSS, DEFAULT_SETTINGS, settingsToVars, type ReaderSettings } from './settings';
 import { Margin } from './margin';
 
+/** Strength of highlights dimmed while others are focused. */
+const DIMMED = 0.3;
+/** Length of focus / dim / show / hide transitions of highlights. */
+const HIGHLIGHT_TRANSITION_MS = 180;
+
 export interface HighlightSpec<T = unknown> {
 	id: string;
 	/** Any locator the reader resolves (`epubcfi(...)`, `:~:text=...`, `t=...`). */
@@ -659,7 +664,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	setHighlightsHidden(hidden: boolean): void {
 		if (hidden === this.highlightsHidden) return;
 		this.highlightsHidden = hidden;
-		this.refreshHighlights();
+		this.refreshHighlights(true);
 	}
 
 	get highlightsAreHidden(): boolean {
@@ -676,12 +681,12 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		const next = new Set(ids);
 		if (next.size === this.focused.size && ids.every((id) => this.focused.has(id))) return;
 		this.focused = next;
-		this.refreshHighlights();
+		this.refreshHighlights(true);
 	}
 
 	/** Whether a highlight is drawn (and reacts to the pointer). */
 	private isDrawn(id: string): boolean {
-		return !this.highlightsHidden || this.focused.has(id);
+		return this.targetLevel(id) > 0;
 	}
 
 	private cachedRange(locator: string): Range | null {
@@ -702,41 +707,99 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return { key: `x-${hash(cssColor)}`, css: cssColor };
 	}
 
-	private refreshHighlights(): void {
+	/** Strength a highlight should be drawn at: 1 normal, DIMMED when others are focused, 0 not drawn. */
+	private targetLevel(id: string): number {
+		if (this.highlightsHidden) return this.focused.has(id) ? 1 : 0;
+		return this.focused.size && !this.focused.has(id) ? DIMMED : 1;
+	}
+
+	/** Strength each highlight was drawn at when the current transition started (or is drawn at, after it). */
+	private levels = new Map<string, number>();
+	/** The running transition: its groups' strengths ease from `from` to `to`. */
+	private transition: { start: number; raf: number } | null = null;
+	/** What is painted: one `Highlight` per color and transition (from → to). */
+	private paintGroups: { name: string; css: string; from: number; to: number }[] = [];
+
+	/** Strength of a highlight right now (mid-transition, in between). */
+	private currentLevel(id: string, target: number): number {
+		const g = this.paintGroupOf.get(id);
+		if (!g) return this.levels.get(id) ?? target;
+		return g.from + (g.to - g.from) * this.progress();
+	}
+	private paintGroupOf = new Map<string, { from: number; to: number }>();
+
+	private progress(): number {
+		if (!this.transition) return 1;
+		const t = Math.min(1, (performance.now() - this.transition.start) / HIGHLIGHT_TRANSITION_MS);
+		return 1 - (1 - t) * (1 - t); // ease out
+	}
+
+	/**
+	 * Paint the highlights. With `animate`, each one eases from the strength it is drawn at now to its
+	 * new one (focus, dimming, hiding); otherwise they jump there.
+	 */
+	private refreshHighlights(animate = false): void {
 		if (!this.rendered || !this.HighlightCtor) return;
-		const groups = new Map<string, { css: string; dim: boolean; ranges: Range[] }>();
-		// With some highlights focused (and the rest drawn), the rest are dimmed.
-		const dimming = this.focused.size > 0 && !this.highlightsHidden;
+		const groups = new Map<string, { css: string; from: number; to: number; ranges: Range[] }>();
+		const levels = new Map<string, number>();
+		const groupOf = new Map<string, { from: number; to: number }>();
 		for (const h of this.highlights) {
 			if (!h.range) h.range = this.cachedRange(h.spec.locator);
-			if (!h.range || !this.isDrawn(h.spec.id)) continue;
+			if (!h.range) continue;
+			const to = this.targetLevel(h.spec.id);
+			const from = animate ? Math.round(this.currentLevel(h.spec.id, to) * 100) / 100 : to;
+			levels.set(h.spec.id, from);
+			if (!from && !to) continue;
 			const color = this.colorKey(h.spec.color);
-			const dim = dimming && !this.focused.has(h.spec.id);
-			const key = dim ? `dim-${color.key}` : color.key;
+			const key = `${color.key}-${Math.round(from * 100)}-${Math.round(to * 100)}`;
 			let g = groups.get(key);
-			if (!g) groups.set(key, (g = { css: color.css, dim, ranges: [] }));
+			if (!g) groups.set(key, (g = { css: color.css, from, to, ranges: [] }));
 			g.ranges.push(h.range);
+			groupOf.set(h.spec.id, g);
 		}
 		for (const name of this.highlightNames) this.registry!.delete(name);
 		this.highlightNames.clear();
+		this.paintGroups = [];
 		for (const [key, g] of groups) {
 			const name = this.hlName(key);
 			this.registry!.set(name, new this.HighlightCtor!(...g.ranges));
 			this.highlightNames.add(name);
+			this.paintGroups.push({ name, css: g.css, from: g.from, to: g.to });
 		}
-		this.updateHighlightStyles(groups);
+		this.levels = levels;
+		this.paintGroupOf = groupOf;
+		if (this.transition) this.win.cancelAnimationFrame(this.transition.raf);
+		this.transition = null;
+		const moving = this.paintGroups.some((g) => g.from !== g.to);
+		if (!moving) return this.updateHighlightStyles();
+		this.transition = { start: performance.now(), raf: 0 };
+		const frame = () => {
+			if (!this.transition) return;
+			this.updateHighlightStyles();
+			if (this.progress() < 1) this.transition.raf = this.win.requestAnimationFrame(frame);
+			else {
+				// Settled: remember where everything ended up.
+				for (const [id, g] of this.paintGroupOf) this.levels.set(id, g.to);
+				this.paintGroupOf.clear();
+				for (const g of this.paintGroups) g.from = g.to;
+				this.transition = null;
+			}
+		};
+		frame();
 	}
 
-	private updateHighlightStyles(groups?: Map<string, { css: string; dim?: boolean }>): void {
-		const pct = Math.round(this.highlightOpacity * 100);
+	private updateHighlightStyles(): void {
+		const pct = this.highlightOpacity * 100;
+		const p = this.progress();
 		const rules = [
 			`::highlight(${this.hlName('search')}) { background-color: rgba(255, 170, 0, 0.35); }`,
 			`::highlight(${this.hlName('search-current')}) { background-color: rgba(255, 120, 0, 0.8); color: black; }`,
 			`::highlight(${this.hlName('pending')}) { background-color: var(--text-selection, Highlight); }`,
 			`::highlight(${this.hlName('hover')}) { text-decoration: underline 2px; text-decoration-color: currentColor; }`,
 		];
-		for (const [key, g] of groups ?? []) {
-			rules.push(`::highlight(${this.hlName(key)}) { background-color: color-mix(in srgb, ${g.css} ${g.dim ? Math.round(pct * 0.3) : pct}%, transparent); }`);
+		for (const g of this.paintGroups) {
+			const level = g.from + (g.to - g.from) * p;
+			rules.push(`::highlight(${g.name}) { background-color: color-mix(in srgb, ${g.css} ${(pct * level).toFixed(1)}%, transparent); }`);
 		}
 		this.highlightStyle.textContent = rules.join('\n');
 	}
@@ -1096,6 +1159,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		this.win.cancelAnimationFrame(this.flashRaf);
 		for (const fn of this.cleanup) fn();
 		this.marginLayer?.destroy();
+		if (this.transition) this.win.cancelAnimationFrame(this.transition.raf);
 		for (const name of this.highlightNames) this.registry?.delete(name);
 		for (const layer of this.layers.values()) for (const name of layer.names) this.registry?.delete(name);
 		for (const k of ['flash', 'search', 'search-current', 'hover', 'pending']) this.registry?.delete(this.hlName(k));
