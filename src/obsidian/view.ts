@@ -464,6 +464,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		const entries = this.plugin.settings.noColor === 'none' ? all.filter((e) => e.color) : all;
 		const specs: HighlightSpec<HighlightEntry>[] = entries.map((e) => ({ id: e.id, locator: e.locator, color: e.color, data: e }));
 		this.reader.setHighlights(specs);
+		this.reader.setHighlightsHidden(this.plugin.settings.hideHighlights);
 		this.sidebar.setHighlights(all);
 		this.refreshMargin();
 	}
@@ -471,7 +472,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	/** Show (or hide) comments in the margin, per settings; when there is no room they show on hover. */
 	refreshMargin(): void {
 		if (!this.reader?.isRendered || !this.file) return;
-		const shown = new Set(this.reader.getHighlights().map((h) => h.id));
+		// Hidden highlights take their comments with them.
+		const shown = new Set(this.plugin.settings.hideHighlights ? [] : this.reader.getHighlights().map((h) => h.id));
 		const entries = this.plugin.index.get(this.file.path).filter((e) => shown.has(e.id));
 		this.marginComments.update(entries, [...this.providerNotes.values()]);
 	}

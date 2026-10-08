@@ -640,6 +640,19 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return this.highlights.map((h) => h.spec);
 	}
 
+	private highlightsHidden = false;
+
+	/** Stop drawing highlights (they also stop reacting to the pointer), or draw them again. Ranges stay resolved. */
+	setHighlightsHidden(hidden: boolean): void {
+		if (hidden === this.highlightsHidden) return;
+		this.highlightsHidden = hidden;
+		this.refreshHighlights();
+	}
+
+	get highlightsAreHidden(): boolean {
+		return this.highlightsHidden;
+	}
+
 	private cachedRange(locator: string): Range | null {
 		if (!this.rendered) return null;
 		if (!this.rangeCache.has(locator)) this.rangeCache.set(locator, this.resolve(locator));
@@ -663,7 +676,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		const groups = new Map<string, { css: string; ranges: Range[] }>();
 		for (const h of this.highlights) {
 			if (!h.range) h.range = this.cachedRange(h.spec.locator);
-			if (!h.range) continue;
+			if (!h.range || this.highlightsHidden) continue;
 			const { key, css } = this.colorKey(h.spec.color);
 			let g = groups.get(key);
 			if (!g) groups.set(key, (g = { css, ranges: [] }));
@@ -709,6 +722,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	/** Highlights under a viewport point. */
 	highlightsAt(x: number, y: number): HighlightSpec[] {
 		const out: HighlightSpec[] = [];
+		if (this.highlightsHidden) return out;
 		for (const h of this.highlights) {
 			if (!h.range) continue;
 			for (const r of Array.from(h.range.getClientRects())) {

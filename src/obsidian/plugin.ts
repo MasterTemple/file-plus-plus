@@ -149,6 +149,13 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		};
 	}
 
+	/** Show or hide highlights (and their margin comments) in every open document; the sidebar still lists them. */
+	async setHighlightsHidden(hidden: boolean): Promise<void> {
+		this.settings.hideHighlights = hidden;
+		await this.saveSettings();
+		for (const v of this.views()) v.refreshHighlights();
+	}
+
 	/** Show or hide comments in the margin of every open document. */
 	async setMarginComments(on: boolean): Promise<void> {
 		this.settings.marginComments = on;
@@ -326,7 +333,10 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		await this.loadSettings();
 		this.applyReaderSettings();
 		this.refreshPalette();
-		for (const v of this.views()) v.onAppearanceChanged();
+		for (const v of this.views()) {
+			v.onAppearanceChanged();
+			v.refreshHighlights();
+		}
 	}
 
 	async saveSettings(): Promise<void> {
@@ -1022,6 +1032,11 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return true;
 				},
 			});
+		this.addCommand({
+			id: 'toggle-highlights',
+			name: 'Show / hide highlights',
+			callback: () => void this.setHighlightsHidden(!this.settings.hideHighlights),
+		});
 		this.addCommand({
 			id: 'toggle-margin-comments',
 			name: 'Toggle comments in the margin',

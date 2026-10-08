@@ -1047,3 +1047,16 @@ body.fpp-appearance-open .mobile-navbar {
 .fpp-mc.is-active .fpp-mc-actions {
 	display: flex;
 }
+
+/* Highlights tab: show / hide highlights in the document, beside the annotation-file button. */
+.fpp-hl-toolbar {
+	align-items: center;
+	gap: var(--size-4-1);
+}
+.fpp-hl-toolbar .fpp-hl-annotation-button {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.fpp-hl-eye {
+	flex: none;
+}

@@ -123,6 +123,8 @@ export interface FppSettings {
 	highlightHold: HighlightGestureAction;
 	/** What "Save as highlight" on another plugin's annotation inserts into the annotation file. */
 	saveAnnotationAs: CopyAction;
+	/** Don't draw highlights (links from notes) in documents; the sidebar still lists them. */
+	hideHighlights: boolean;
 	/** Annotation providers (other plugins) whose annotations aren't drawn in documents. */
 	hiddenProviders: string[];
 	/** Bumped when settings need a one-time migration. */
@@ -207,6 +209,7 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	copyAction: 'text',
 	saveAnnotationAs: 'format:callout',
 	hiddenProviders: [],
+	hideHighlights: false,
 	noColor: 'default',
 	jumpHighlight: true,
 	jumpHighlightDuration: 2000,

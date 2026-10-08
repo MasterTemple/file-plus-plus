@@ -323,6 +323,10 @@ export class Sidebar {
 		setIcon(btn.createSpan(), 'notebook-pen');
 		btn.createSpan({ text: ann ? 'Open annotation file' : 'Create annotation file' });
 		btn.addEventListener('click', () => plugin.openAnnotationFile(this.view));
+		const hidden = s.hideHighlights;
+		const eye = bar.createDiv({ cls: 'clickable-icon fpp-hl-eye', attr: { 'aria-label': hidden ? `Show highlights in the ${plugin.format.noun}` : `Hide highlights in the ${plugin.format.noun}` } });
+		setIcon(eye, hidden ? 'eye-off' : 'eye');
+		eye.addEventListener('click', () => void plugin.setHighlightsHidden(!hidden));
 
 		const counts = { all: this.hlEntries.length, annotation: this.hlEntries.filter(inAnn).length, other: this.hlEntries.filter((e) => !inAnn(e)).length };
 		const filters = el.createDiv('fpp-segmented fpp-hl-filters');
