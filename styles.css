@@ -847,3 +847,46 @@ body.fpp-appearance-open .mobile-navbar {
 .fpp-provider-group-items .fpp-search-result {
 	padding-inline-start: calc(var(--size-4-1) + 14px + 4px);
 }
+
+/* ---------- Plain text (source) view ---------- */
+.fpp-source-view.view-content {
+	padding: 0;
+	overflow: hidden;
+}
+.fpp-source-text {
+	--fpp-source-gutter: calc(var(--fpp-source-digits, 3) * 1ch + 2 * var(--size-4-3));
+	height: 100%;
+	overflow: auto;
+	padding: var(--size-4-4) var(--size-4-3) var(--size-4-16) 0;
+	counter-reset: fpp-line;
+	user-select: text;
+	-webkit-user-select: text;
+	font-family: var(--font-monospace);
+	font-size: var(--code-size, var(--font-smaller));
+	line-height: var(--line-height-normal);
+	color: var(--text-normal);
+	tab-size: 4;
+	background: linear-gradient(to right, transparent calc(var(--fpp-source-gutter) - 1px), var(--background-modifier-border) 0, var(--background-modifier-border) var(--fpp-source-gutter), transparent 0);
+	background-attachment: local;
+}
+.fpp-source-line {
+	position: relative;
+	min-height: calc(1em * var(--line-height-normal));
+	padding-left: calc(var(--fpp-source-gutter) + var(--size-4-3));
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	counter-increment: fpp-line;
+}
+.fpp-source-line::before {
+	content: counter(fpp-line);
+	position: absolute;
+	left: 0;
+	width: calc(var(--fpp-source-gutter) - var(--size-4-3));
+	text-align: right;
+	color: var(--text-faint);
+	user-select: none;
+	-webkit-user-select: none;
+}
+.fpp-error button {
+	margin-top: var(--size-4-3);
+}

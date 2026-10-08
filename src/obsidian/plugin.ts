@@ -10,6 +10,7 @@ import { getComment, removeHighlight, setComment } from './comment-utils';
 import { DocumentEmbed, registerEmbeds, type EmbedContext } from './embed';
 import { FppSettingTab } from './setting-tab';
 import { DocumentView } from './view';
+import { SourceView } from './source-view';
 import type { FileFormat } from './format';
 import type { Annotation, AnnotationProvider, FileApi } from './api';
 
@@ -35,6 +36,11 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	/** View type of the format's files (the plugin id). */
 	get viewType(): string {
 		return this.manifest.id;
+	}
+
+	/** View type of a text format's files shown as plain text (`format.plainText`). */
+	get sourceViewType(): string {
+		return `${this.manifest.id}-source`;
 	}
 
 	/** Page preview source for links into documents (hovering highlights). */
@@ -87,6 +93,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 
 		this.registerView(this.viewType, (leaf) => this.createView(leaf));
 		this.registerExtensions(this.format.extensions, this.viewType);
+		if (this.format.plainText) this.registerView(this.sourceViewType, (leaf) => new SourceView(leaf, this));
 		this.registerHoverLinkSource(this.hoverSource, { display: `${this.manifest.name} highlights`, defaultMod: true });
 		// Obsidian's own editor previews need Ctrl/Cmd; this source (toggleable under Page preview)
 		// previews links in the editor on plain hover, like Reading view does.
@@ -460,6 +467,15 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	activeView(): DocumentView<Doc, R> | null {
 		const v = this.app.workspace.getActiveViewOfType(DocumentView);
 		return v && v.plugin === (this as unknown) ? (v as DocumentView<Doc, R>) : null;
+	}
+
+	/** Switch a leaf between the rendered view of its file and the plain text (`SourceView`), in the same tab. */
+	async toggleSource(leaf: WorkspaceLeaf): Promise<void> {
+		const state = leaf.getViewState();
+		const file = (state.state as { file?: string } | undefined)?.file;
+		if (!file || !this.format.plainText) return;
+		const type = state.type === this.sourceViewType ? this.viewType : this.sourceViewType;
+		await leaf.setViewState({ type, state: { file }, active: true });
 	}
 
 	private updateCalloutStyles(): void {
@@ -887,6 +903,18 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.addCommand({ id: 'toggle-sidebar', name: 'Toggle table of contents / search sidebar', checkCallback: withView((v) => v.toggleSidebar()) });
 		this.addCommand({ id: 'search', name: `Search in ${name}`, checkCallback: withView((v) => v.openSearch()) });
 		this.addCommand({ id: 'annotation-file', name: 'Open or create annotation file', checkCallback: withView((v) => this.openAnnotationFile(v)) });
+		if (this.format.plainText)
+			this.addCommand({
+				id: 'toggle-source',
+				name: `Toggle plain text / ${this.format.noun} view`,
+				checkCallback: (checking) => {
+					const { workspace } = this.app;
+					const v = workspace.getActiveViewOfType(SourceView) ?? workspace.getActiveViewOfType(DocumentView);
+					if (!v?.file || v.plugin !== (this as unknown)) return false;
+					if (!checking) void this.toggleSource(v.leaf);
+					return true;
+				},
+			});
 		this.addCommand({ id: 'appearance', name: 'Reading appearance', checkCallback: withView((v) => v.toggleAppearance()) });
 		this.addCommand({ id: 'font-increase', name: 'Increase font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.min(48, this.readerSettings(v.file?.path).fontSize + 1) })) });
 		this.addCommand({ id: 'font-decrease', name: 'Decrease font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.max(8, this.readerSettings(v.file?.path).fontSize - 1) })) });

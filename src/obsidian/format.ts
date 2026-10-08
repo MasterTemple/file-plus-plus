@@ -27,6 +27,8 @@ export interface FileFormat<Doc = unknown, R extends DocumentReader = DocumentRe
 	/** What one document is called in sentences: `book`, `transcript`. */
 	noun: string;
 	extensions: string[];
+	/** The files are text: offer opening them as plain text (`SourceView`) besides the rendered view. */
+	plainText?: boolean;
 	/** Lucide icon of the view, embeds and the plugin's tabs. */
 	icon: string;
 	/**

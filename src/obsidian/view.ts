@@ -215,7 +215,9 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			console.error('[fpp] failed to open', file.path, e);
 			const name = this.plugin.format.name;
 			this.chapterEl.setText(`Failed to open ${name}`);
-			this.hostEl.createDiv({ cls: 'fpp-error', text: `Could not open this ${name}: ${(e as Error).message}` });
+			const error = this.hostEl.createDiv({ cls: 'fpp-error', text: `Could not open this ${name}: ${(e as Error).message}` });
+			if (this.plugin.format.plainText)
+				error.createDiv().createEl('button', { text: 'Open as plain text' }).addEventListener('click', () => void this.plugin.toggleSource(this.leaf));
 		}
 	}
 
@@ -950,6 +952,14 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	override onPaneMenu(menu: Menu, source: string): void {
 		super.onPaneMenu(menu, source);
+		if (this.file && this.plugin.format.plainText)
+			menu.addItem((i) =>
+				i
+					.setTitle('Open as plain text')
+					.setIcon('file-code')
+					.setSection('open')
+					.onClick(() => this.plugin.toggleSource(this.leaf)),
+			);
 		if (!this.file || !this.reader) return;
 		const ann = this.plugin.annotations.find(this.file);
 		menu.addItem((i) =>

@@ -21,6 +21,7 @@ src/obsidian/
   format.ts     FileFormat: everything a plugin tells the library about its format
   plugin.ts     FilePlusPlusPlugin: link interception, copy/templates, highlight actions, annotation files, appearance, commands, API
   view.ts       DocumentView (subclassable: buildExtraUi, onReaderReady, onNavigate, onTeardown, extendSelectionMenu, extendHighlightMenu)
+  source-view.ts SourceView: the raw file, read-only monospace with line numbers (formats with `plainText`); `toggleSource(leaf)` swaps views in the same tab
   embed.ts      DocumentEmbed (subclassable) for ![[file#…]] and hover previews
   sidebar.ts, setting-tab.ts, appearance.ts, highlight-index.ts, annotations.ts, comment-*.ts, annotation-tip.ts
   notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)

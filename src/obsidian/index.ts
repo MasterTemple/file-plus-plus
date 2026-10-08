@@ -2,6 +2,7 @@ export * from './format';
 export * from './api';
 export { FilePlusPlusPlugin, type CopyTarget } from './plugin';
 export { DocumentView } from './view';
+export { SourceView } from './source-view';
 export { DocumentEmbed, type EmbedContext } from './embed';
 export { HighlightIndex, resolveFile, type HighlightEntry } from './highlight-index';
 export { Annotations } from './annotations';
