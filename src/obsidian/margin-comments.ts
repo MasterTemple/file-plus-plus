@@ -44,11 +44,15 @@ export class MarginComments extends Component {
 		margin.setEnabled(this.view.plugin.settings.marginComments);
 		const notes: MarginNote[] = [];
 		const seen = new Set<string>();
+		const file = this.view.file;
+		const annPath = (file && this.view.plugin.annotations.find(file)?.path) ?? null;
 		for (const e of highlights) {
 			if (!e.comment) continue;
 			const id = `hl:${e.id}`;
 			seen.add(id);
-			const el = this.card(id, [e.comment, e.color, e.updated?.getTime(), e.sourcePath, e.heading].join('\u0000'), (el, child) => this.buildHighlightCard(el, child, e));
+			const inAnn = e.sourcePath === annPath;
+			const key = [e.comment, e.color, e.updated?.getTime(), e.sourcePath, e.heading, inAnn].join('\u0000');
+			const el = this.card(id, key, (el, child) => this.buildHighlightCard(el, child, e, inAnn));
 			notes.push({ id, range: reader.highlightRange(e.id), el });
 		}
 		for (const p of providers) {
@@ -111,20 +115,24 @@ export class MarginComments extends Component {
 		return s.palette.find((p) => p.name === name)?.color ?? name ?? 'var(--text-highlight-bg)';
 	}
 
-	private buildHighlightCard(el: HTMLElement, child: Component, e: HighlightEntry): void {
+	/** `inAnnotationFile`: the comment is in the document's annotation file, so the card doesn't name its note. */
+	private buildHighlightCard(el: HTMLElement, child: Component, e: HighlightEntry, inAnnotationFile: boolean): void {
 		const { view } = this;
 		el.style.setProperty('--swatch', this.colorCss(e.color));
 		const body = el.createDiv('fpp-mc-body markdown-rendered');
 		void MarkdownRenderer.render(view.app, e.comment!, body, e.sourcePath, child);
 		this.handleLinks(body, e.sourcePath);
-		const meta = el.createDiv('fpp-mc-meta');
-		const note = meta.createEl('a', { cls: 'fpp-mc-source', text: e.sourcePath.split('/').pop()!.replace(/\.md$/, '') });
-		note.setAttr('aria-label', e.heading ? `${e.sourcePath} › ${e.heading}` : e.sourcePath);
-		note.addEventListener('click', (ev) => {
-			ev.stopPropagation();
-			void view.plugin.openSource(e, view);
-		});
-		if (e.updated) {
+		const noteName = e.sourcePath.split('/').pop()!.replace(/\.md$/, '');
+		const meta = !inAnnotationFile || e.updated ? el.createDiv('fpp-mc-meta') : null;
+		if (meta && !inAnnotationFile) {
+			const note = meta.createEl('a', { cls: 'fpp-mc-source', text: noteName });
+			note.setAttr('aria-label', e.heading ? `${e.sourcePath} › ${e.heading}` : e.sourcePath);
+			note.addEventListener('click', (ev) => {
+				ev.stopPropagation();
+				void view.plugin.openSource(e, view);
+			});
+		}
+		if (meta && e.updated) {
 			meta.createSpan({ cls: 'fpp-mc-time', text: timeAgo(e.updated), attr: { 'aria-label': `Updated ${e.updated.toLocaleString()}` } });
 		}
 		const actions = el.createDiv('fpp-mc-actions');
@@ -137,7 +145,7 @@ export class MarginComments extends Component {
 			});
 		};
 		action('pencil', 'Edit comment', () => void view.editComment(e));
-		action('file-text', `Open in "${note.getText()}"`, () => void view.plugin.openSource(e, view));
+		action('file-text', `Open in "${noteName}"`, () => void view.plugin.openSource(e, view));
 		this.bindCard(el, `hl:${e.id}`, [e.id], (menu) => view.addHighlightItems(menu, [e]));
 		el.addEventListener('dblclick', (ev) => {
 			if ((ev.target as HTMLElement).closest('a, .fpp-mc-actions')) return;
