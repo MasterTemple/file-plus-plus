@@ -12,6 +12,8 @@ import { Margin } from './margin';
 const DIMMED = 0.3;
 /** Length of focus / dim / show / hide transitions of highlights. */
 const HIGHLIGHT_TRANSITION_MS = 180;
+/** How long the pointer may be off highlights before hover ends (crossing the gap between lines). */
+const HOVER_LEAVE_MS = 120;
 
 export interface HighlightSpec<T = unknown> {
 	id: string;
@@ -181,6 +183,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	private anchorPosition: 'top' | 'center' = 'top';
 	private hostSize = { w: 0, h: 0 };
 	private lastHover: string = '';
+	private hoverLeaveTimer = 0;
 	private lastLayerHover: string = '';
 	private layers = new Map<string, Layer>();
 	private layerCounter = 0;
@@ -821,13 +824,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	highlightsAt(x: number, y: number): HighlightSpec[] {
 		const out: HighlightSpec[] = [];
 		for (const h of this.highlights) {
-			if (!h.range || !this.isDrawn(h.spec.id)) continue;
-			for (const r of Array.from(h.range.getClientRects())) {
-				if (x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1) {
-					out.push(h.spec);
-					break;
-				}
-			}
+			if (h.range && this.isDrawn(h.spec.id) && linesContain(h.range, x, y)) out.push(h.spec);
 		}
 		return out;
 	}
@@ -1097,6 +1094,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 
 		let hoverRaf = 0;
 		on(this.scroller, 'mouseleave', (e) => {
+			this.win.clearTimeout(this.hoverLeaveTimer);
 			if (this.lastHover) {
 				this.lastHover = '';
 				this.emit('highlight-hover', e, []);
@@ -1114,9 +1112,16 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 				const annotations = this.layerHitsAt(e.clientX, e.clientY);
 				this.scroller.style.cursor = hits.length || annotations.length ? 'pointer' : '';
 				const key = hits.map((h) => h.id).join('|');
-				if (key !== this.lastHover) {
+				this.win.clearTimeout(this.hoverLeaveTimer);
+				if (!key && this.lastHover) {
+					// Leaving highlights: wait a moment, so crossing to an adjacent one doesn't flash the others.
+					this.hoverLeaveTimer = this.win.setTimeout(() => {
+						this.lastHover = '';
+						this.emit('highlight-hover', e, []);
+					}, HOVER_LEAVE_MS);
+				} else if (key !== this.lastHover) {
 					this.lastHover = key;
-					this.emit('highlight-hover', e, hits); // empty when leaving highlights
+					this.emit('highlight-hover', e, hits);
 				}
 				const layerKey = annotations.map((a) => `${a.layer}:${a.spec.id}`).join('|');
 				if (layerKey !== this.lastLayerHover) {
@@ -1156,6 +1161,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		this.destroyed = true;
 		this.win.clearTimeout(this.relocateTimer);
 		this.win.clearTimeout(this.flashTimer);
+		this.win.clearTimeout(this.hoverLeaveTimer);
 		this.win.cancelAnimationFrame(this.flashRaf);
 		for (const fn of this.cleanup) fn();
 		this.marginLayer?.destroy();
@@ -1197,6 +1203,35 @@ function rangeRect(range: Range): DOMRect | null {
 
 function rectsContain(range: Range, x: number, y: number, slack = 2): boolean {
 	for (const r of Array.from(range.getClientRects())) if (x >= r.left - slack && x <= r.right + slack && y >= r.top - slack && y <= r.bottom + slack) return true;
+	return false;
+}
+
+/**
+ * Whether a point is on a range, counting the line spacing between its lines (the rects leave it
+ * out), so moving from one line of a highlight to the next stays on it.
+ */
+export function linesContain(range: Range, x: number, y: number, slack = 1): boolean {
+	const lines: { top: number; bottom: number; left: number; right: number }[] = [];
+	for (const r of Array.from(range.getClientRects())) {
+		if (!r.width && !r.height) continue;
+		if (x >= r.left - slack && x <= r.right + slack && y >= r.top - slack && y <= r.bottom + slack) return true;
+		// Rects that overlap vertically are on the same line.
+		const line = lines.find((l) => r.top < l.bottom && r.bottom > l.top);
+		if (line) {
+			line.top = Math.min(line.top, r.top);
+			line.bottom = Math.max(line.bottom, r.bottom);
+			line.left = Math.min(line.left, r.left);
+			line.right = Math.max(line.right, r.right);
+		} else lines.push({ top: r.top, bottom: r.bottom, left: r.left, right: r.right });
+	}
+	lines.sort((a, b) => a.top - b.top);
+	for (let i = 1; i < lines.length; i++) {
+		const a = lines[i - 1];
+		const b = lines[i];
+		// Only bridge line spacing, not a gap between paragraphs or a page.
+		if (b.top - a.bottom > Math.min(a.bottom - a.top, b.bottom - b.top)) continue;
+		if (y >= a.bottom && y <= b.top && x >= Math.min(a.left, b.left) - slack && x <= Math.max(a.right, b.right) + slack) return true;
+	}
 	return false;
 }
 
