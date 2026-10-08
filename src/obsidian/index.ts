@@ -13,3 +13,5 @@ export * from './settings';
 export { around } from './patch';
 export { askForComment, confirmDeleteHighlight } from './comment-modal';
 export { buildAppearanceControls, type AppearanceTarget } from './appearance';
+export { ImportModal, importHighlights, resolveBooks, type BookImportResult, type ImportSummary } from './import';
+export * from './import-utils';

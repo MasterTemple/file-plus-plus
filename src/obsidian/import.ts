@@ -1,5 +1,5 @@
 import { Modal, Notice, Setting, TFile, type App } from 'obsidian';
-import { bookKey, commentKey, parseImport, type ImportEntry, type ParsedImport } from './import-utils';
+import { bookKey, commentKey, parseImport, sameText, textFragmentFor, type ImportEntry, type ParsedImport } from './import-utils';
 import { needsComment, titleCase, type CopyAction, type ImportKind } from './settings';
 import type { FilePlusPlusPlugin } from './plugin';
 import type { DocumentView } from './view';
@@ -13,6 +13,8 @@ export interface BookImportResult {
 	duplicates: number;
 	/** Of a kind (with / without comment) that was turned off. */
 	skipped: number;
+	/** Found by their text because their locator didn't match it (e.g. another edition). */
+	foundByText: number;
 	/** Entries whose passage wasn't found in the document (`#3 "Call me…"`). */
 	notFound: string[];
 	error?: string;
@@ -75,7 +77,7 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 	let n = 0;
 	for (const [file, entries] of byFile) {
 		onProgress?.(`${file.basename} (${++n} of ${byFile.size})…`);
-		const result: BookImportResult = { file, annotationFile: null, created: false, added: 0, duplicates: 0, skipped: 0, notFound: [] };
+		const result: BookImportResult = { file, annotationFile: null, created: false, added: 0, duplicates: 0, skipped: 0, foundByText: 0, notFound: [] };
 		books.push(result);
 		try {
 			const view = await viewFor(plugin, file);
@@ -88,7 +90,15 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 			}
 			const items: { info: NonNullable<ReturnType<typeof reader.describeRange>>; block: string }[] = [];
 			for (const e of entries) {
-				const range = reader.resolve(e.locator);
+				let range = reader.resolve(e.locator);
+				// A different edition (or a stale locator): the passage isn't there, or reads differently. Find the text instead.
+				if (e.text && (!range || !sameText(range.toString(), e.text))) {
+					const byText = reader.resolve(textFragmentFor(e.text));
+					if (byText) {
+						range = byText;
+						result.foundByText++;
+					}
+				}
 				const info = range && reader.describeRange(range);
 				if (!info) {
 					const snippet = (e.text ?? e.comment).slice(0, 40);
@@ -269,6 +279,7 @@ export class ImportModal extends Modal {
 			if (b.duplicates) parts.push(`${b.duplicates} already there`);
 			if (b.skipped) parts.push(`${b.skipped} of a kind turned off`);
 			if (b.notFound.length) parts.push(`${b.notFound.length} not found in the ${plugin.format.noun}`);
+			if (b.foundByText) parts.push(`${b.foundByText} located by their text`);
 			li.appendText(`: ${parts.join(', ')}`);
 			if (b.annotationFile) {
 				li.appendText(b.created ? ' — created ' : ' — in ');

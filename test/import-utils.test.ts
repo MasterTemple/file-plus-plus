@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { parseLocator, textFragmentScheme } from '../src/core';
-import { bookKey, commentKey, normalizeLocator, parseImport, textFragmentFor } from '../src/obsidian/import-utils';
+import { bookKey, commentKey, normalizeLocator, parseImport, sameText, textFragmentFor } from '../src/obsidian/import-utils';
 
 test('parseImport: fields, aliases and wrappers', () => {
 	const json = JSON.stringify({
@@ -43,4 +43,12 @@ test('keys', () => {
 	expect(commentKey(null)).toBe('');
 	expect(bookKey('Books/Moby Dick.EPUB')).toBe('moby dick');
 	expect(bookKey('Moby Dick')).toBe('moby dick');
+});
+
+test('sameText ignores quotes, spacing, case and soft hyphens', () => {
+	expect(sameText('“It’s a white whale,” I say', '"It\'s a white\nwhale," i say')).toBe(true);
+	expect(sameText('regu\u00adlating the circulation.', 'regulating the circulation')).toBe(true);
+	expect(sameText('Call me Ishmael. Some years ago', 'Call me Ishmael')).toBe(true);
+	expect(sameText('Call me Ishmael', 'Some years ago')).toBe(false);
+	expect(sameText('', 'x')).toBe(false);
 });

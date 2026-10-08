@@ -110,3 +110,19 @@ export function bookKey(name: string): string {
 		.trim()
 		.toLowerCase();
 }
+
+/** Letters and digits only, lowercased: text compared across editions, quote styles and hyphenation. */
+function looseText(s: string): string {
+	return s
+		.normalize('NFKD')
+		.replace(/[\u00ad\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+/** True when a passage found in the document reads like the highlighted text the import gave. */
+export function sameText(found: string, expected: string): boolean {
+	const a = looseText(found);
+	const b = looseText(expected);
+	return !!a && !!b && (a === b || a.includes(b) || b.includes(a));
+}
