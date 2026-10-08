@@ -142,12 +142,12 @@ export class Margin {
 				this.shown = show;
 				this.width = show ? width : 0;
 				if (show) {
-					// Center the text when there's room on both sides; otherwise move it left.
+					// Center the text and the notes together, so spare room is split between the outer edges.
 					content.style.marginLeft = content.style.marginRight = '';
 					const cs = this.r.win.getComputedStyle(content);
 					const full = parseFloat(cs.maxWidth) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
 					const reserve = width + gap;
-					const left = isFinite(full) ? Math.max(0, Math.min((avail - full) / 2, avail - full - reserve)) : 0;
+					const left = isFinite(full) ? Math.max(0, (avail - full - reserve) / 2) : 0;
 					content.style.marginLeft = `${left}px`;
 					content.style.marginRight = `${reserve}px`;
 				} else {
