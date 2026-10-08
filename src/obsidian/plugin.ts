@@ -10,7 +10,7 @@ import { getComment, removeHighlight, setComment } from './comment-utils';
 import { DocumentEmbed, registerEmbeds, type EmbedContext } from './embed';
 import { FppSettingTab } from './setting-tab';
 import { DocumentView } from './view';
-import { SourceView } from './source-view';
+import { SourceView, type SourceMode } from './source-view';
 import type { FileFormat } from './format';
 import type { Annotation, AnnotationProvider, FileApi } from './api';
 
@@ -469,13 +469,16 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		return v && v.plugin === (this as unknown) ? (v as DocumentView<Doc, R>) : null;
 	}
 
-	/** Switch a leaf between the rendered view of its file and the plain text (`SourceView`), in the same tab. */
-	async toggleSource(leaf: WorkspaceLeaf): Promise<void> {
+	/**
+	 * Switch a leaf between the rendered view of its file and the plain text (`SourceView`, read or
+	 * edited: `mode`), in the same tab.
+	 */
+	async toggleSource(leaf: WorkspaceLeaf, mode: SourceMode = 'read'): Promise<void> {
 		const state = leaf.getViewState();
 		const file = (state.state as { file?: string } | undefined)?.file;
 		if (!file || !this.format.plainText) return;
-		const type = state.type === this.sourceViewType ? this.viewType : this.sourceViewType;
-		await leaf.setViewState({ type, state: { file }, active: true });
+		if (state.type === this.sourceViewType) await leaf.setViewState({ type: this.viewType, state: { file }, active: true });
+		else await leaf.setViewState({ type: this.sourceViewType, state: { file, mode }, active: true });
 	}
 
 	private updateCalloutStyles(): void {
@@ -502,6 +505,21 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		});
 		this.registerEvent(metadataCache.on('changed', (file) => file.extension === 'md' && this.index.indexFile(file)));
 		this.registerEvent(metadataCache.on('deleted', (file) => this.index.removeSource(file.path, true)));
+		// A document changed (edited as plain text, synced): re-render its open views.
+		const reloadTimers = new Map<string, number>();
+		this.registerEvent(
+			vault.on('modify', (file) => {
+				if (!(file instanceof TFile) || !this.format.extensions.includes(file.extension.toLowerCase())) return;
+				window.clearTimeout(reloadTimers.get(file.path));
+				reloadTimers.set(
+					file.path,
+					window.setTimeout(() => {
+						reloadTimers.delete(file.path);
+						for (const v of this.views()) if (v.file === file) void v.reload();
+					}, 500),
+				);
+			}),
+		);
 		let rebuildTimer = 0;
 		this.registerEvent(
 			vault.on('rename', (file, oldPath) => {
@@ -912,6 +930,18 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					const v = workspace.getActiveViewOfType(SourceView) ?? workspace.getActiveViewOfType(DocumentView);
 					if (!v?.file || v.plugin !== (this as unknown)) return false;
 					if (!checking) void this.toggleSource(v.leaf);
+					return true;
+				},
+			});
+		if (this.format.plainText)
+			this.addCommand({
+				id: 'edit-source',
+				name: 'Toggle reading / editing as plain text',
+				checkCallback: (checking) => {
+					const { workspace } = this.app;
+					const v = workspace.getActiveViewOfType(SourceView) ?? workspace.getActiveViewOfType(DocumentView);
+					if (!v?.file || v.plugin !== (this as unknown)) return false;
+					if (!checking) void (v instanceof SourceView ? v.toggleMode() : this.toggleSource(v.leaf, 'edit'));
 					return true;
 				},
 			});

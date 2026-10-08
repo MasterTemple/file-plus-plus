@@ -93,6 +93,23 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		this.buildExtraUi();
 	}
 
+	/**
+	 * True while `reload()` re-renders the same file (in `onTeardown` and `onReaderReady`), so
+	 * subclasses can keep their UI, e.g. a playing media player.
+	 */
+	protected reloading = false;
+
+	/** Re-render the view's file (it changed), at the position it was read at. */
+	async reload(): Promise<void> {
+		if (!this.file || !this.reader) return;
+		this.reloading = true;
+		try {
+			await this.onLoadFile(this.file);
+		} finally {
+			this.reloading = false;
+		}
+	}
+
 	/** Called after a document is rendered (and on every reload of the view's file). */
 	protected onReaderReady(_reader: R): void {}
 
@@ -216,8 +233,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			const name = this.plugin.format.name;
 			this.chapterEl.setText(`Failed to open ${name}`);
 			const error = this.hostEl.createDiv({ cls: 'fpp-error', text: `Could not open this ${name}: ${(e as Error).message}` });
-			if (this.plugin.format.plainText)
-				error.createDiv().createEl('button', { text: 'Open as plain text' }).addEventListener('click', () => void this.plugin.toggleSource(this.leaf));
+			if (this.plugin.format.plainText) {
+				const buttons = error.createDiv('fpp-error-buttons');
+				buttons.createEl('button', { text: 'Read as plain text' }).addEventListener('click', () => void this.plugin.toggleSource(this.leaf, 'read'));
+				buttons.createEl('button', { text: 'Edit as plain text' }).addEventListener('click', () => void this.plugin.toggleSource(this.leaf, 'edit'));
+			}
 		}
 	}
 
@@ -952,14 +972,22 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	override onPaneMenu(menu: Menu, source: string): void {
 		super.onPaneMenu(menu, source);
-		if (this.file && this.plugin.format.plainText)
+		if (this.file && this.plugin.format.plainText) {
 			menu.addItem((i) =>
 				i
-					.setTitle('Open as plain text')
+					.setTitle('Read as plain text')
 					.setIcon('file-code')
 					.setSection('open')
-					.onClick(() => this.plugin.toggleSource(this.leaf)),
+					.onClick(() => this.plugin.toggleSource(this.leaf, 'read')),
 			);
+			menu.addItem((i) =>
+				i
+					.setTitle('Edit as plain text')
+					.setIcon('pencil')
+					.setSection('open')
+					.onClick(() => this.plugin.toggleSource(this.leaf, 'edit')),
+			);
+		}
 		if (!this.file || !this.reader) return;
 		const ann = this.plugin.annotations.find(this.file);
 		menu.addItem((i) =>

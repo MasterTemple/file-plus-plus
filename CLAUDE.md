@@ -21,7 +21,7 @@ src/obsidian/
   format.ts     FileFormat: everything a plugin tells the library about its format
   plugin.ts     FilePlusPlusPlugin: link interception, copy/templates, highlight actions, annotation files, appearance, commands, API
   view.ts       DocumentView (subclassable: buildExtraUi, onReaderReady, onNavigate, onTeardown, extendSelectionMenu, extendHighlightMenu)
-  source-view.ts SourceView: the raw file, read-only monospace with line numbers (formats with `plainText`); `toggleSource(leaf)` swaps views in the same tab
+  source-view.ts SourceView: the raw file, monospace with line numbers, `mode` read (divs) or edit (CodeMirror 6 from Obsidian: `@codemirror/*` are externals, devDependencies pinned to Obsidian's versions) (formats with `plainText`); `toggleSource(leaf, mode)` swaps views in the same tab
   embed.ts      DocumentEmbed (subclassable) for ![[file#…]] and hover previews
   sidebar.ts, setting-tab.ts, appearance.ts, highlight-index.ts, annotations.ts, comment-*.ts, annotation-tip.ts
   notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)
@@ -54,4 +54,5 @@ All CSS classes, data attributes, CSS variables and highlight names the library 
 - **Selection in shadow DOM:** try `shadowRoot.getSelection()`, then both `getComposedRanges` signatures, then a plain range.
 - **Menus:** the color row and the Copy/Insert/Both row are custom DOM inside `item.dom` that stop pointer/touch/click events. `afterMenuHidden` / `keepPendingSelection` hand the pending selection between menus.
 - **Private APIs:** `app.embedRegistry`, `app.commands.removeCommand`, `app.setting.openTabById`, `app.emulateMobile`, `editor.cm.posAtDOM`, the `openLinkText` patch.
+- **Documents change on disk** (plain-text editing, sync): the plugin calls `view.reload()` (debounced); `reloading` is true during its `onTeardown` / `onReaderReady`, so subclasses can keep UI (Transcript++ keeps a playing player). The source view only writes after an edit (`dirty`), ignores the echo of its own save (`lastSaved`), and marks changes from disk `Transaction.remote` so they aren't saved back.
 - **Settings:** `loadSettings` deep-clones defaults and migrates via `settingsVersion` (v4: `linkType` is `primary` | `text`). When adding copy formats or menu items, keep `syncMenus()` and `syncFormatCommands()` in mind.

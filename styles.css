@@ -887,6 +887,68 @@ body.fpp-appearance-open .mobile-navbar {
 	user-select: none;
 	-webkit-user-select: none;
 }
-.fpp-error button {
+.fpp-error-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-4-2);
 	margin-top: var(--size-4-3);
+}
+.fpp-source-view .fpp-source-editor,
+.fpp-source-view.is-editing .fpp-source-text {
+	display: none;
+}
+.fpp-source-view.is-editing .fpp-source-editor {
+	display: block;
+	height: 100%;
+}
+.fpp-source-editor .cm-editor {
+	height: 100%;
+	font-family: var(--font-monospace);
+	font-size: var(--code-size, var(--font-smaller));
+	color: var(--text-normal);
+	background: none;
+}
+.fpp-source-editor .cm-editor.cm-focused {
+	outline: none;
+}
+.fpp-source-editor .cm-scroller {
+	font-family: inherit;
+	line-height: var(--line-height-normal);
+	padding: var(--size-4-4) 0 var(--size-4-16);
+}
+.fpp-source-editor .cm-content {
+	caret-color: var(--text-normal);
+}
+.fpp-source-editor .cm-gutters {
+	background: var(--background-primary);
+	color: var(--text-faint);
+	border-right: 1px solid var(--background-modifier-border);
+}
+.fpp-source-editor .cm-lineNumbers .cm-gutterElement {
+	padding: 0 var(--size-4-3);
+}
+.fpp-source-editor .cm-activeLine {
+	background: var(--background-secondary);
+}
+.fpp-source-editor .cm-activeLineGutter {
+	background: var(--background-secondary);
+	color: var(--text-muted);
+}
+.fpp-source-editor .cm-selectionBackground,
+.fpp-source-editor .cm-editor.cm-focused .cm-selectionBackground {
+	background: var(--text-selection) !important;
+}
+.fpp-source-editor .cm-cursor {
+	border-left-color: var(--text-normal);
+}
+.fpp-source-editor .cm-panels {
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	border-color: var(--background-modifier-border);
+}
+.fpp-source-editor .cm-searchMatch {
+	background: var(--text-highlight-bg);
+}
+.fpp-source-editor .cm-selectionMatch {
+	background: var(--background-modifier-hover);
 }

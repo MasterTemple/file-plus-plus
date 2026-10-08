@@ -5,7 +5,7 @@ The shared engine of PDF++-style Obsidian plugins for other file types: **EPUB++
 A plugin built on it provides only its file format; everything else is shared:
 
 - **Reader** (`file-plus-plus/core`, no Obsidian imports): renders a document into a shadow root; highlights and color palette; annotation layers (thousands of other plugins' annotations, cheap); jump flashes; selection (shadow-DOM-safe); full-text search; Text Fragments (`:~:text=…`) and line/column locators (`L12C5-L14C3`) for any format; selection → Markdown.
-- **Obsidian side** (`file-plus-plus/obsidian`): the view (toolbar, palette, sidebar with contents / search / highlights / other plugins' annotations, appearance per device and orientation); link interception (links reuse and scroll an open tab); highlights from links in notes, with colors (`&color=`); comments next to highlights; copy formats and templates; **annotation files** (one note per document, a heading per chapter, new annotations inserted in document order); hover previews and `![[embeds]]`; a plain-text view of the raw file for text formats (`plainText: true`); context menus and mobile gestures; the backlinks pane; settings; an API for other plugins' annotation providers.
+- **Obsidian side** (`file-plus-plus/obsidian`): the view (toolbar, palette, sidebar with contents / search / highlights / other plugins' annotations, appearance per device and orientation); link interception (links reuse and scroll an open tab); highlights from links in notes, with colors (`&color=`); comments next to highlights; copy formats and templates; **annotation files** (one note per document, a heading per chapter, new annotations inserted in document order); hover previews and `![[embeds]]`; the raw file as plain text, to read or edit, for text formats (`plainText: true`; open views re-render when a document changes); context menus and mobile gestures; the backlinks pane; settings; an API for other plugins' annotation providers.
 - **Build and test tooling**: `buildPlugin` (esbuild, per-plugin class prefix, styles), an isolated headless Obsidian, CDP drivers for real mouse/touch/key input.
 
 ## Writing a plugin
@@ -24,7 +24,7 @@ export default class MyPlusPlus extends FilePlusPlusPlugin<MyDoc, MyReader> {
 // src/format.ts — what the library needs to know about the format
 export const myFormat: FileFormat<MyDoc, MyReader> = {
 	name: 'Transcript', noun: 'transcript', extensions: ['srt'], icon: 'captions',
-	plainText: true,                                    // offer "Open as plain text" (the raw file, monospace)
+	plainText: true,                                    // offer "Read / Edit as plain text" (the raw file, monospace)
 	frontmatterKey: 'transcript',                       // annotation files: `transcript: "[[talk.srt]]"`
 	schemes: [timeScheme, textFragmentScheme],          // link subpaths, tried in order
 	linkTypeName: 'Timestamp', linkTypeDescription: '…',
