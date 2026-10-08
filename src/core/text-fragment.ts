@@ -43,19 +43,22 @@ export function parseTextFragment(input: string): TextFragment | null {
 	return tf as TextFragment;
 }
 
-/** Find the text-coordinate range matched by a fragment. */
-export function findTextFragment(index: TextIndex, tf: TextFragment): [number, number] | null {
+/**
+ * Find the text-coordinate range matched by a fragment: the first match starting at or after `from`
+ * (a `text` offset; default: the whole document).
+ */
+export function findTextFragment(index: TextIndex, tf: TextFragment, from = 0): [number, number] | null {
 	const F = index.folded;
 	const start = foldString(tf.start);
 	const end = tf.end ? foldString(tf.end) : '';
 	const prefix = tf.prefix ? foldString(tf.prefix) : '';
 	const suffix = tf.suffix ? foldString(tf.suffix) : '';
 	if (!start) return null;
-	let from = 0;
+	let at = from > 0 ? index.textToFolded(from, from)[0] : 0;
 	while (true) {
-		const pos = F.indexOf(start, from);
+		const pos = F.indexOf(start, at);
 		if (pos === -1) return null;
-		from = pos + 1;
+		at = pos + 1;
 		if (prefix) {
 			let p = pos;
 			while (p > 0 && F[p - 1] === ' ') p--;
@@ -78,8 +81,11 @@ export function findTextFragment(index: TextIndex, tf: TextFragment): [number, n
 
 const words = (s: string) => s.split(' ').filter(Boolean);
 
-/** Generate a fragment that resolves (as the first match) to the given text-coordinate range. */
-export function createTextFragment(index: TextIndex, start: number, end: number): TextFragment | null {
+/**
+ * Generate a fragment that resolves (as the first match at or after `from`) to the given
+ * text-coordinate range. A later `from` (a scope, e.g. the cues of a timestamp) gives shorter fragments.
+ */
+export function createTextFragment(index: TextIndex, start: number, end: number, from = 0): TextFragment | null {
 	const T = index.text;
 	while (start < end && T[start] === ' ') start++;
 	while (end > start && T[end - 1] === ' ') end--;
@@ -94,7 +100,7 @@ export function createTextFragment(index: TextIndex, start: number, end: number)
 	const before = words(T.slice(Math.max(0, start - 300), start));
 	const after = words(T.slice(end, end + 300));
 	const ok = () => {
-		const r = findTextFragment(index, tf);
+		const r = findTextFragment(index, tf, from);
 		return !!r && r[0] === start && r[1] === end;
 	};
 	for (let n = 0; !ok() && n <= 8; n++) {

@@ -32,3 +32,18 @@ describe('locators', () => {
 		expect(formatLineLocator(linesFromRange(whole)!)).toBe('L2');
 	});
 });
+
+describe('scoped text fragments', () => {
+	test('the first match at or after an offset; shorter fragments inside a scope', async () => {
+		const { TextIndex, createTextFragment, findTextFragment, serializeTextFragment } = await import('../src/core');
+		document.body.innerHTML = '<div id="r"><p>the whale and the whale</p><p>another whale here</p></div>';
+		const index = new TextIndex(document.getElementById('r')!);
+		const second = index.text.indexOf('whale', 5);
+		expect(findTextFragment(index, { start: 'whale' })).toEqual([4, 9]);
+		expect(findTextFragment(index, { start: 'whale' }, 10)).toEqual([second, second + 5]);
+		const global = serializeTextFragment(createTextFragment(index, second, second + 5)!);
+		const scoped = serializeTextFragment(createTextFragment(index, second, second + 5, 10)!);
+		expect(global).not.toBe(':~:text=whale');
+		expect(scoped).toBe(':~:text=whale');
+	});
+});

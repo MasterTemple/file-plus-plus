@@ -330,17 +330,27 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		if (!this.rendered || !locator) return null;
 		const loc = this.parse(locator);
 		if (!loc.locator) return null;
-		if (loc.scheme === textFragmentScheme.id) {
-			const tf = parseTextFragment(loc.locator);
-			const r = tf && findTextFragment(this.textIndex, tf);
-			return r ? this.textIndex.toRange(r[0], r[1]) : null;
-		}
+		if (loc.scheme === textFragmentScheme.id) return this.resolveTextFragment(loc.locator);
 		return this.resolveLocator(loc);
 	}
 
-	textFragmentFromRange(range: Range): string | null {
+	/**
+	 * The range a text fragment (`:~:text=…`) matches: its first match in the document, or with
+	 * `within`, its first match starting inside that range (e.g. the cues of a timestamp).
+	 */
+	resolveTextFragment(fragment: string, within?: Range): Range | null {
+		const tf = parseTextFragment(fragment);
+		if (!tf) return null;
+		const [from, to] = within ? this.textIndex.rangeToOffsets(within) : [0, Infinity];
+		const r = findTextFragment(this.textIndex, tf, from);
+		return r && r[0] <= to ? this.textIndex.toRange(r[0], r[1]) : null;
+	}
+
+	/** A text fragment for a range: unique in the document, or with `within`, from the start of that range. */
+	textFragmentFromRange(range: Range, within?: Range): string | null {
 		const [s, e] = this.textIndex.rangeToOffsets(range);
-		const tf = createTextFragment(this.textIndex, s, e);
+		const from = within ? this.textIndex.rangeToOffsets(within)[0] : 0;
+		const tf = createTextFragment(this.textIndex, s, e, from);
 		return tf ? serializeTextFragment(tf) : null;
 	}
 

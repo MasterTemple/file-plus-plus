@@ -896,6 +896,9 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		if (!copyOnly) this.extendSelectionMenu(menu, info);
 	}
 
+	/** Add the plugin's own items for a highlight to the highlight menu (in the highlight's `section`). */
+	protected extendHighlightMenu(_menu: Menu, _entry: HighlightEntry, _section: string): void {}
+
 	/** Add the plugin's own items to the selection menu (after the copy items; not for copy-only menus). */
 	protected extendSelectionMenu(_menu: Menu, _info: SelectionInfo): void {}
 
@@ -998,6 +1001,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 							.onClick((evt) => this.plugin.deleteHighlight(entry, evt.shiftKey)),
 					);
 			}
+			this.extendHighlightMenu(menu, entry, section);
 		}
 	}
 

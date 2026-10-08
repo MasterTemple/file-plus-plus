@@ -20,7 +20,7 @@ src/core/       no Obsidian imports
 src/obsidian/
   format.ts     FileFormat: everything a plugin tells the library about its format
   plugin.ts     FilePlusPlusPlugin: link interception, copy/templates, highlight actions, annotation files, appearance, commands, API
-  view.ts       DocumentView (subclassable: buildExtraUi, onReaderReady, onNavigate, onTeardown)
+  view.ts       DocumentView (subclassable: buildExtraUi, onReaderReady, onNavigate, onTeardown, extendSelectionMenu, extendHighlightMenu)
   embed.ts      DocumentEmbed (subclassable) for ![[file#…]] and hover previews
   sidebar.ts, setting-tab.ts, appearance.ts, highlight-index.ts, annotations.ts, comment-*.ts, annotation-tip.ts
   notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)
@@ -39,6 +39,7 @@ All CSS classes, data attributes, CSS variables and highlight names the library 
 - A `FileFormat`: load/unload/info, `createReader`, `position` (sortable keys for annotation files), names (`name`, `noun`, `linkTypeName`), `frontmatterKey`, appearance tweaks.
 - A plugin: `class X extends FilePlusPlusPlugin { format = … }`; override `createView` / `createEmbed` for extra UI, `createApi` for format-specific API, `migrateSettings` for renamed settings.
 - Range locators are highlights, point locators are positions (annotation-file headings). `scheme.isRange` decides.
+- A locator can combine the format's own position with a text fragment for the exact words (Transcript++: `t=…:~:text=…`): `textFragmentFromRange(range, within)` and `resolveTextFragment(fragment, within)` scope the fragment to a range.
 
 ## Gotchas learned the hard way
 
