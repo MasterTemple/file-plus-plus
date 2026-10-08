@@ -2,3 +2,4 @@
 export * from './annotation-utils';
 export * from './comment-utils';
 export * from './link-utils';
+export * from './import-utils';

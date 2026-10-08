@@ -12,6 +12,12 @@ export interface CopyFormat {
 	template: string;
 }
 
+/** One kind of imported highlight (with or without a comment): imported or not, and in which format. */
+export interface ImportKind {
+	enabled: boolean;
+	format: CopyAction;
+}
+
 /** What a copy produces: plain text, a link, the alternate link type, or a copy format (`format:<id>`). */
 export type CopyAction = 'text' | 'link' | 'alt-link' | `format:${string}`;
 
@@ -125,6 +131,9 @@ export interface FppSettings {
 	saveAnnotationAs: CopyAction;
 	/** Don't draw highlights (links from notes) in documents; the sidebar still lists them. */
 	hideHighlights: boolean;
+	/** Importing highlights from JSON: which kinds to import, and as what (a copy action). */
+	importPlain: ImportKind;
+	importComment: ImportKind;
 	/** Annotation providers (other plugins) whose annotations aren't drawn in documents. */
 	hiddenProviders: string[];
 	/** Bumped when settings need a one-time migration. */
@@ -210,6 +219,8 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	saveAnnotationAs: 'format:callout',
 	hiddenProviders: [],
 	hideHighlights: false,
+	importPlain: { enabled: true, format: 'format:callout' },
+	importComment: { enabled: true, format: 'format:callout-comment' },
 	noColor: 'default',
 	jumpHighlight: true,
 	jumpHighlightDuration: 2000,

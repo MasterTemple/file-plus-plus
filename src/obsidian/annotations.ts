@@ -118,6 +118,17 @@ export class Annotations {
 		};
 	}
 
+	/** Insert several rendered annotations at their places in the annotation file, in one write. */
+	async insertMany(view: DocumentView, file: TFile, items: { info: SelectionInfo; block: string }[]): Promise<number> {
+		const order = this.ordering(view);
+		const keyed = items.map((it) => ({ ...it, key: this.format.position.key(it.info.locator) })).filter((it) => it.key !== null);
+		await this.app.vault.process(file, (data) => {
+			for (const it of keyed) data = insertAnnotation(data, it.key, it.block, order).data;
+			return data;
+		});
+		return keyed.length;
+	}
+
 	/** Insert a rendered annotation at its place in the annotation file. */
 	async insert(view: DocumentView, file: TFile, info: SelectionInfo, block: string): Promise<Placement> {
 		const sel = this.format.position.key(info.locator);

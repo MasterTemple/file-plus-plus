@@ -10,6 +10,7 @@ import { getComment, removeHighlight, setComment } from './comment-utils';
 import { DocumentEmbed, registerEmbeds, type EmbedContext } from './embed';
 import { FppSettingTab } from './setting-tab';
 import { DocumentView } from './view';
+import { ImportModal } from './import';
 import { SourceView, type SourceMode } from './source-view';
 import type { FileFormat } from './format';
 import type { Annotation, AnnotationProvider, FileApi } from './api';
@@ -842,11 +843,11 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	}
 
 	/** Build a link to a selection. `alternate` swaps the configured link type (the format's ↔ text fragment). */
-	buildLink(view: DocumentView<Doc, R>, info: SelectionInfo, color: string | null, alternate = false, extra: Record<string, string> = {}): string {
+	buildLink(view: DocumentView<Doc, R>, info: SelectionInfo, color: string | null, alternate = false, extra: Record<string, string> = {}, updated?: Date | null): string {
 		const useText = (this.settings.linkType === 'text') !== alternate;
 		const locator = (useText && info.textFragment()) || info.locator;
 		const alias = renderTemplate(this.settings.aliasTemplate, { ...this.templateVars(view, info, color, ''), ...extra });
-		const params = { [UPDATED_PARAM]: this.settings.timestampInLinks ? linkTimestamp() : undefined };
+		const params = { [UPDATED_PARAM]: this.settings.timestampInLinks ? linkTimestamp(updated ?? undefined) : undefined };
 		return this.documentLink(view.file!, locator, alias, this.settings.colorInLinks ? color : null, undefined, params);
 	}
 
@@ -904,9 +905,9 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	 * The clipboard text for a selection (synchronous, so it can run inside a `copy` event).
 	 * `extra`: more template variables, e.g. `{{label}}` when saving another plugin's annotation.
 	 */
-	renderCopy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, comment = '', extra: Record<string, string> = {}): string {
+	renderCopy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, comment = '', extra: Record<string, string> = {}, updated?: Date | null): string {
 		if (what === 'text') return this.selectionText(info);
-		const link = this.buildLink(view, info, color, what === 'alt-link', extra);
+		const link = this.buildLink(view, info, color, what === 'alt-link', extra, updated);
 		return typeof what === 'string' ? link : renderTemplate(what.template, { ...this.templateVars(view, info, color, link), ...extra, comment });
 	}
 
@@ -1038,6 +1039,19 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return true;
 				},
 			});
+		this.addCommand({ id: 'import-json', name: 'Import highlights from JSON…', callback: () => new ImportModal(this.app, this as unknown as FilePlusPlusPlugin).open() });
+		// A .json file's menu offers to import it.
+		this.registerEvent(
+			this.app.workspace.on('file-menu', (menu, file) => {
+				if (!(file instanceof TFile) || file.extension.toLowerCase() !== 'json') return;
+				menu.addItem((i) =>
+					i
+						.setTitle(`Import highlights into ${this.manifest.name}…`)
+						.setIcon('import')
+						.onClick(async () => new ImportModal(this.app, this as unknown as FilePlusPlusPlugin, await this.app.vault.read(file)).open()),
+				);
+			}),
+		);
 		this.addCommand({
 			id: 'toggle-highlights',
 			name: 'Show / hide highlights',

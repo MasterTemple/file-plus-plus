@@ -24,6 +24,7 @@ src/obsidian/
   view.ts       DocumentView (subclassable: buildExtraUi, onReaderReady, onNavigate, onTeardown, extendSelectionMenu, extendHighlightMenu)
   source-view.ts SourceView: the raw file, monospace with line numbers, `mode` read (divs) or edit (CodeMirror 6 from Obsidian: `@codemirror/*` are externals, devDependencies pinned to Obsidian's versions) (formats with `plainText`); `toggleSource(leaf, mode)` swaps views in the same tab
   embed.ts      DocumentEmbed (subclassable) for ![[file#…]] and hover previews
+  import.ts     ImportModal + importHighlights: JSON → annotation files (opens each document's view to resolve passages, dedupes by resolved passage + comment); parsing in import-utils.ts (pure)
   margin-comments.ts  MarginComments: highlight comments and providers' `note`s as cards in `reader.margin`
   sidebar.ts, setting-tab.ts, appearance.ts, highlight-index.ts, annotations.ts, comment-*.ts, annotation-tip.ts
   notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)
