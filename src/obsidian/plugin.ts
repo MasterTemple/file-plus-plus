@@ -62,6 +62,9 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		return new DocumentEmbed<Doc, R>(this, ctx, file, subpath);
 	}
 
+	/** The plugin's own settings, shown first in the settings tab (under a heading with the format's name). */
+	displaySettings(_containerEl: HTMLElement, _refresh: () => void): void {}
+
 	/** Called at the end of `onload`; plugins add their own commands, settings, events here. */
 	protected async onLoaded(): Promise<void> {}
 

@@ -127,6 +127,11 @@ export interface RenderedSection {
 }
 
 let instanceCounter = 0;
+/**
+ * Differs per load of the code: after a plugin reload, readers of the old and new code coexist for a
+ * moment (embeds re-render), and their highlight names must not collide.
+ */
+const RUN = Math.random().toString(36).slice(2, 6);
 
 /**
  * Renders a document as one continuous scrolling page inside a shadow root (no iframes) and provides
@@ -141,7 +146,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	readonly win: Window & typeof globalThis;
 	readonly content: HTMLElement;
 	/** Unique per reader (and per plugin, through the prefix): names highlights, fonts… */
-	protected readonly id = ++instanceCounter;
+	protected readonly id = `${RUN}${++instanceCounter}`;
 	private settings: ReaderSettings;
 	private palette: Record<string, string>;
 	private defaultColor: string;

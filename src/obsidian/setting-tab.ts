@@ -143,6 +143,13 @@ export class FppSettingTab extends PluginSettingTab {
 		const noun = format.noun;
 		containerEl.empty();
 
+		const own = createDiv();
+		this.plugin.displaySettings(own, () => this.display());
+		if (own.childElementCount) {
+			new Setting(containerEl).setName(format.name).setHeading();
+			containerEl.appendChild(own);
+		}
+
 		new Setting(containerEl).setName('Reading').setHeading();
 		this.appearanceSection(containerEl);
 

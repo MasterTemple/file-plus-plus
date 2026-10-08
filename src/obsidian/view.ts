@@ -79,8 +79,19 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		return this.plugin.format.extensions.includes(extension.toLowerCase());
 	}
 
-	/** Called once the toolbar, sidebar and reader host exist: add UI around them. */
+	/**
+	 * Called once the toolbar, sidebar and reader host exist (on the first `onOpen` or `onLoadFile`,
+	 * not in the constructor, so a subclass's fields are initialized): add UI around them.
+	 */
 	protected buildExtraUi(): void {}
+
+	private extraUiBuilt = false;
+
+	private ensureExtraUi(): void {
+		if (this.extraUiBuilt) return;
+		this.extraUiBuilt = true;
+		this.buildExtraUi();
+	}
 
 	/** Called after a document is rendered (and on every reload of the view's file). */
 	protected onReaderReady(_reader: R): void {}
@@ -122,7 +133,6 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		this.annotationTip = new AnnotationTip(this.mainEl);
 		this.register(() => this.annotationTip.destroy());
 		this.toggleSidebar(!Platform.isMobile && this.plugin.settings.sidebarOpen, false);
-		this.buildExtraUi();
 
 		this.offIndex = (() => {
 			const ref = this.plugin.index.on('changed', (paths) => {
@@ -143,7 +153,9 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		this.registerDomEvent(this.contentEl, 'copy', (e: ClipboardEvent) => this.onCopy(e));
 	}
 
-	override async onOpen(): Promise<void> {}
+	override async onOpen(): Promise<void> {
+		this.ensureExtraUi();
+	}
 
 	/** Floating previous/next buttons over the document while there are search results. */
 	setSearchNavVisible(visible: boolean): void {
@@ -169,6 +181,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	// --------------------------------------------------------------------------------------------
 
 	override async onLoadFile(file: TFile): Promise<void> {
+		this.ensureExtraUi();
 		const token = ++this.loadToken;
 		this.teardown();
 		this.chapterEl.setText('Loading…');
@@ -880,7 +893,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 				);
 			}
 		}
+		if (!copyOnly) this.extendSelectionMenu(menu, info);
 	}
+
+	/** Add the plugin's own items to the selection menu (after the copy items; not for copy-only menus). */
+	protected extendSelectionMenu(_menu: Menu, _info: SelectionInfo): void {}
 
 	/** Prompt for a highlight's comment and write it into the note. */
 	async editComment(entry: HighlightEntry): Promise<void> {
