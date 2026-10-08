@@ -51,8 +51,9 @@ class CommentModal extends Modal {
 	}
 
 	/**
-	 * Mobile: keep the dialog directly above the on-screen keyboard (the bottom of the visual
-	 * viewport), shrinking it if the visible area is too small, so its buttons stay reachable.
+	 * Mobile: pin the dialog to the top of the visible area, where the on-screen keyboard can't cover
+	 * it (not every Obsidian app reports the keyboard through the visual viewport), and keep it short
+	 * enough to stay above a keyboard either way.
 	 */
 	private fitAboveKeyboard(): void {
 		this.containerEl.addClass('fpp-comment-container');
@@ -61,18 +62,15 @@ class CommentModal extends Modal {
 		const fit = () => {
 			const top = vv ? vv.offsetTop : 0;
 			const height = vv ? vv.height : window.innerHeight;
-			this.modalEl.style.maxHeight = `${Math.max(160, height - 2 * gap)}px`;
-			const h = this.modalEl.offsetHeight;
-			this.containerEl.style.paddingTop = `${Math.max(top + gap, top + height - h - gap)}px`;
+			const safe = parseFloat(getComputedStyle(document.body).getPropertyValue('--safe-area-inset-top')) || 0;
+			this.containerEl.style.paddingTop = `${top + safe + gap}px`;
+			this.modalEl.style.maxHeight = `${Math.max(160, Math.min(height - safe - 2 * gap, window.innerHeight * 0.55))}px`;
 		};
 		fit();
-		const ro = new ResizeObserver(fit); // content height changes (typing grows the text box)
-		ro.observe(this.modalEl);
 		vv?.addEventListener('resize', fit);
 		vv?.addEventListener('scroll', fit);
 		window.addEventListener('resize', fit);
 		this.stopFit = () => {
-			ro.disconnect();
 			vv?.removeEventListener('resize', fit);
 			vv?.removeEventListener('scroll', fit);
 			window.removeEventListener('resize', fit);

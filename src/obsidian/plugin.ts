@@ -3,7 +3,7 @@ import { MarkdownView, Notice, Platform, Plugin, TFile, parseLinktext, type Pane
 import { around } from './patch';
 import { HighlightIndex, resolveFile, type HighlightEntry } from './highlight-index';
 import { formatLink, linkAt, renderTemplate, setCalloutColor, setLinkColor } from './link-utils';
-import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type CopyAction, type Orientation, type CopyFormat, type FppSettings, type OpenTarget } from './settings';
+import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AnnotationMode, type AppearancePlatform, type CopyAction, type Orientation, type CopyFormat, type FppSettings, type OpenTarget } from './settings';
 import { Annotations } from './annotations';
 import { askForComment, confirmDeleteHighlight } from './comment-modal';
 import { getComment, removeHighlight, setComment } from './comment-utils';
@@ -795,8 +795,11 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		return what.name.toLowerCase();
 	}
 
-	/** Copy (and/or insert into the annotation file, per its mode; `copyOnly` never inserts). */
-	async copy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, copyOnly = false): Promise<void> {
+	/**
+	 * Copy (and/or insert into the annotation file, per its mode; `copyOnly` never inserts).
+	 * `newFileMode`: for a document without an annotation file, Insert / Both create one first.
+	 */
+	async copy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, copyOnly = false, newFileMode?: AnnotationMode): Promise<void> {
 		let comment = '';
 		if (this.asksForComment(what)) {
 			const c = await askForComment(this.app, info.text);
@@ -804,8 +807,20 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 			comment = c;
 		}
 		const text = this.renderCopy(view, info, what, color, comment);
-		const ann = what !== 'text' && !copyOnly && view.file ? this.annotations.find(view.file) : null;
-		const mode = ann ? this.annotations.mode(ann) : 'copy';
+		const inserts = what !== 'text' && !copyOnly && !!view.file;
+		let ann = inserts ? this.annotations.find(view.file!) : null;
+		let mode: AnnotationMode = ann ? this.annotations.mode(ann) : 'copy';
+		if (inserts && !ann && newFileMode && newFileMode !== 'copy') {
+			try {
+				ann = await this.annotations.create(view);
+				await this.annotations.setMode(ann, newFileMode);
+				new Notice(`Created ${ann.path}`);
+				mode = newFileMode;
+			} catch (e) {
+				this.notice((e as Error).message);
+				return;
+			}
+		}
 		if (mode !== 'insert') await navigator.clipboard.writeText(text);
 		if (ann && mode !== 'copy') await this.addToAnnotationFile(view, ann, info, text, mode === 'both');
 		else new Notice(`Copied ${this.copyLabel(what)} to clipboard`);

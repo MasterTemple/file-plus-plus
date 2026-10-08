@@ -858,14 +858,16 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		const section = 'fpp-selection';
 		const label = (title: string) => menu.addItem((i) => (i.setTitle(title) as any).setIsLabel?.(true).setSection?.(section));
 		// With an annotation file, the Copy | Insert | Both row says what the items below do; otherwise they copy.
-		const ann = !copyOnly && this.file && this.plugin.annotations.find(this.file);
+		const ann = (!copyOnly && this.file && this.plugin.annotations.find(this.file)) || null;
+		// Without an annotation file the row starts on Copy; Insert / Both create the file when an item is picked.
+		const pending: { mode: AnnotationMode } = { mode: 'copy' };
 		if (!copyOnly) this.addActiveColorRow(menu, section);
 		if (copyOnly) label('Copy');
-		else if (ann) {
+		else {
 			if (isParagraph) label('Paragraph');
-			this.addAnnotationModeRow(menu, ann, section);
-		} else label(isParagraph ? 'Copy paragraph' : 'Copy');
-		const copy = (what: CopyTarget, color: string | null) => this.plugin.copy(this, info, what, color, copyOnly);
+			this.addAnnotationModeRow(menu, ann, section, pending);
+		}
+		const copy = (what: CopyTarget, color: string | null) => this.plugin.copy(this, info, what, color, copyOnly, ann ? undefined : pending.mode);
 		for (const entry of s.selectionMenu) {
 			if (!entry.show) continue;
 			if (entry.id === 'link') {
@@ -914,18 +916,21 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		await this.plugin.setHighlightComment(entry, comment);
 	}
 
-	/** `[Copy | Insert | Both]`: what the selection items do for this document's annotation file. */
-	private addAnnotationModeRow(menu: Menu, ann: TFile, section: string): void {
+	/**
+	 * `[Copy | Insert | Both]`: what the selection items do with the document's annotation file. Without
+	 * one (`ann` null) the choice is kept in `pending` for this menu only.
+	 */
+	private addAnnotationModeRow(menu: Menu, ann: TFile | null, section: string, pending: { mode: AnnotationMode }): void {
 		menu.addItem((item) => {
 			item.setSection(section);
 			const dom = (item as MenuItem & { dom?: HTMLElement }).dom;
 			if (!dom) return;
 			dom.empty();
 			dom.addClass('fpp-mode-row');
-			dom.setAttr('aria-label', `When copying, for ${ann.basename}`);
+			dom.setAttr('aria-label', ann ? `When copying, for ${ann.basename}` : 'When copying (Insert and Both create an annotation file)');
 			const labels: Record<AnnotationMode, string> = { copy: 'Copy', insert: 'Insert', both: 'Both' };
 			const buttons: HTMLElement[] = [];
-			const current = this.plugin.annotations.mode(ann);
+			const current = ann ? this.plugin.annotations.mode(ann) : pending.mode;
 			for (const mode of ANNOTATION_MODES) {
 				const b = dom.createDiv({ cls: 'fpp-mode-button', text: labels[mode] });
 				b.toggleClass('is-active', mode === current);
@@ -936,7 +941,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 					e.preventDefault();
 					e.stopPropagation();
 					buttons.forEach((x) => x.toggleClass('is-active', x === b));
-					await this.plugin.annotations.setMode(ann, mode);
+					if (ann) await this.plugin.annotations.setMode(ann, mode);
+					else pending.mode = mode;
 				});
 			}
 		});
