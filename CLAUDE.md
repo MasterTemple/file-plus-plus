@@ -39,6 +39,7 @@ All CSS classes, data attributes, CSS variables and highlight names the library 
 - A `DocumentReader` subclass: `schemes`, `renderContent()` (append to `content`, `addSection()` each part), `locatorFromRange()`, `resolveLocator()`, `toc`; optional `extraCss()`.
 - A `FileFormat`: load/unload/info, `createReader`, `position` (sortable keys for annotation files), names (`name`, `noun`, `linkTypeName`), `frontmatterKey`, appearance tweaks.
 - A plugin: `class X extends FilePlusPlusPlugin { format = … }`; override `createView` / `createEmbed` for extra UI, `createApi` for format-specific API, `migrateSettings` for renamed settings.
+- Taking over other files: override `documentFor(file)`. `WorkspaceLeaf.prototype.setViewState` is patched, so every way of opening (explorer, links, restored layouts) goes through it; only Obsidian's default view type for the extension is taken over, and `state.takeOver: false` opts out (`openUntakenOver`). The opened file is the view's `source` (view state; `setSource`, `onSourceChange`).
 - Range locators are highlights, point locators are positions (annotation-file headings). `scheme.isRange` decides.
 - A locator can combine the format's own position with a text fragment for the exact words (Transcript++: `t=…:~:text=…`): `textFragmentFromRange(range, within)` and `resolveTextFragment(fragment, within)` scope the fragment to a range.
 

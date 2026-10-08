@@ -1,5 +1,5 @@
 import { formatLocator, type DocumentReader, type ReaderSettings, type SelectionInfo } from '../core';
-import { MarkdownView, Notice, Platform, Plugin, TFile, parseLinktext, type PaneType, type Workspace, type WorkspaceLeaf, type OpenViewState } from 'obsidian';
+import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, parseLinktext, type PaneType, type ViewState, type Workspace, type OpenViewState } from 'obsidian';
 import { around } from './patch';
 import { HighlightIndex, resolveFile, type HighlightEntry } from './highlight-index';
 import { formatLink, linkAt, renderTemplate, setCalloutColor, setLinkColor } from './link-utils';
@@ -68,6 +68,15 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		return new DocumentEmbed<Doc, R>(this, ctx, file, subpath);
 	}
 
+	/**
+	 * Taking over other files (optional): when `file` (e.g. a video) is opened in Obsidian's own view
+	 * for its type, show this document instead, or return null to let Obsidian open it. The view
+	 * remembers which file was opened (`DocumentView.source`). Called for every file opened, so keep it cheap.
+	 */
+	documentFor(_file: TFile): TFile | null {
+		return null;
+	}
+
 	/** The plugin's own settings, shown first in the settings tab (under a heading with the format's name). */
 	displaySettings(_containerEl: HTMLElement, _refresh: () => void): void {}
 
@@ -101,6 +110,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.registerEditorHover();
 		this.addSettingTab(new FppSettingTab(this.app, this as unknown as FilePlusPlusPlugin));
 		this.patchLinkOpening();
+		this.patchViewOpening();
 		this.registerIndexEvents();
 		this.registerCommands();
 		this.updateCalloutStyles();
@@ -571,6 +581,57 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 				},
 			}),
 		);
+	}
+
+	/** Every way of opening a file in a tab ends in `setViewState`: there, files `documentFor` takes over open the document. */
+	private patchViewOpening(): void {
+		const plugin = this;
+		this.register(
+			around(WorkspaceLeaf.prototype, {
+				setViewState(old) {
+					return function (this: WorkspaceLeaf, viewState: ViewState, eState?: unknown) {
+						let state = viewState;
+						try {
+							state = plugin.takeOver(viewState) ?? viewState;
+						} catch (e) {
+							console.error('[fpp] take over failed', e);
+						}
+						return old.call(this, state, eState);
+					};
+				},
+			}),
+		);
+	}
+
+	/**
+	 * The view state showing the document `documentFor` gives for the file of `viewState`, when that is
+	 * opened in Obsidian's default view for its type (not another plugin's, nor with `takeOver: false`).
+	 */
+	private takeOver(viewState: ViewState): ViewState | null {
+		const state = viewState.state as { file?: unknown; takeOver?: unknown } | undefined;
+		if (typeof state?.file !== 'string' || state.takeOver === false) return null;
+		if (viewState.type === this.viewType || viewState.type === this.sourceViewType) return null;
+		const file = this.app.vault.getFileByPath(state.file);
+		const ext = file?.extension.toLowerCase();
+		if (!file || this.format.extensions.includes(ext!)) return null;
+		const own = this.defaultViewType(ext!);
+		if (own && own !== viewState.type) return null;
+		const doc = this.documentFor(file);
+		if (!doc) return null;
+		return { ...viewState, type: this.viewType, state: { file: doc.path, source: file.path } };
+	}
+
+	/** The view type Obsidian opens files with this extension in (private API; undefined if unknown). */
+	private defaultViewType(ext: string): string | undefined {
+		const registry = (this.app as unknown as { viewRegistry?: { getTypeByExtension?(ext: string): string | undefined } }).viewRegistry;
+		return registry?.getTypeByExtension?.(ext);
+	}
+
+	/** Open a file in Obsidian's own view for it, even when `documentFor` would take it over. */
+	async openUntakenOver(leaf: WorkspaceLeaf, file: TFile): Promise<void> {
+		const type = this.defaultViewType(file.extension.toLowerCase());
+		if (!type) return leaf.openFile(file, { active: true });
+		await leaf.setViewState({ type, state: { file: file.path, takeOver: false }, active: true });
 	}
 
 	async openDocument(file: TFile, subpath: string, newLeaf?: PaneType | boolean, state?: OpenViewState): Promise<void> {

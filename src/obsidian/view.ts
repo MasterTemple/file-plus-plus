@@ -1,5 +1,5 @@
 import { type DocumentReader, type HighlightSpec, type LayerHit, type SelectionInfo, type TocItem } from '../core';
-import { FileView, Menu, Notice, Platform, Scope, TFile, setIcon, type MenuItem, type WorkspaceLeaf } from 'obsidian';
+import { FileView, Menu, Notice, Platform, Scope, TFile, setIcon, type MenuItem, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import type { HighlightEntry } from './highlight-index';
 import { ANNOTATION_MODES, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, type AnnotationMode, type HighlightGestureAction } from './settings';
 import type { CopyTarget, FilePlusPlusPlugin } from './plugin';
@@ -297,6 +297,40 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	/** After a jump to a locator (e.g. a media player seeks to it). */
 	protected onNavigate(_locator: string): void {}
+
+	/**
+	 * The file that was opened to show this document, when the plugin took it over (see
+	 * `FilePlusPlusPlugin.documentFor`; e.g. the video of a transcript), or chosen with `setSource`. Kept in the view state.
+	 */
+	source: TFile | null = null;
+
+	override getState(): Record<string, unknown> {
+		const state = super.getState();
+		return this.source ? { ...state, source: this.source.path } : state;
+	}
+
+	override async setState(state: unknown, result: ViewStateResult): Promise<void> {
+		const s = state as { file?: unknown; source?: unknown } | null;
+		const path = typeof s?.source === 'string' ? s.source : null;
+		const source = path ? this.app.vault.getFileByPath(path) : null;
+		// A new file is loaded with its source; the same file only changes source when one is given.
+		const sameFile = typeof s?.file === 'string' && s.file === this.file?.path;
+		const changed = source !== this.source && (!sameFile || source !== null);
+		if (changed) this.source = source;
+		await super.setState(state, result);
+		if (changed && sameFile && this.reader) this.onSourceChange();
+	}
+
+	/** Change `source` (null: none) and save it with the layout. */
+	setSource(file: TFile | null): void {
+		if (file === this.source) return;
+		this.source = file;
+		this.app.workspace.requestSaveLayout();
+		if (this.reader) this.onSourceChange();
+	}
+
+	/** `source` changed while the document stayed open (on a new document, `onReaderReady` sees the new one). */
+	protected onSourceChange(): void {}
 
 	goToToc(item: TocItem): void {
 		this.reader?.goTo(item);
@@ -972,6 +1006,15 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	override onPaneMenu(menu: Menu, source: string): void {
 		super.onPaneMenu(menu, source);
+		const opened = this.source;
+		if (opened)
+			menu.addItem((i) =>
+				i
+					.setTitle(`Open ${opened.name} by itself`)
+					.setIcon('file')
+					.setSection('open')
+					.onClick(() => void this.plugin.openUntakenOver(this.leaf, opened)),
+			);
 		if (this.file && this.plugin.format.plainText) {
 			menu.addItem((i) =>
 				i

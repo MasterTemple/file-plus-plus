@@ -55,6 +55,8 @@ await buildPlugin({ root: import.meta.dir, prefix: 'tpp', production: process.ar
 
 Subclass `DocumentView` / `DocumentEmbed` (via `createView` / `createEmbed`) to add UI such as a media player, and override `createApi` to add format-specific API functions.
 
+To take over other file types (optional), override `documentFor(file)`: when a file is opened in Obsidian's own view for its type, return a document of your format to show instead (Transcript++ opens `talk.mp4` as `talk.srt`). The view's `source` is the file that was opened (kept in the view state, changed with `setSource`, reported to `onSourceChange`); its tab menu offers to open that file by itself.
+
 ## Using it
 
 Until it is published, plugins live next to it and link it:
