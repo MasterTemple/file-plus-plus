@@ -4,6 +4,7 @@ import type { HighlightEntry } from './highlight-index';
 import { layerId, type Annotation, type AnnotationProvider } from './api';
 import { titleCase } from './settings';
 import type { DocumentView } from './view';
+import { timeAgo } from './margin-comments';
 
 /** `toc`, `search`, `highlights`, or `provider:<id>` for another plugin's annotations. */
 type Tab = string;
@@ -458,6 +459,7 @@ export class Sidebar {
 			ev.stopPropagation();
 			this.view.plugin.openSource(e, this.view);
 		});
+		if (e.updated) meta.createSpan({ cls: 'fpp-hl-time', text: timeAgo(e.updated), attr: { 'aria-label': `Updated ${e.updated.toLocaleString()}` } });
 		item.addEventListener('click', (ev) => {
 			if ((ev.target as HTMLElement).closest('a')) return; // links inside comments
 			this.view.navigate(e.locator);

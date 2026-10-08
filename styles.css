@@ -952,3 +952,98 @@ body.fpp-appearance-open .mobile-navbar {
 .fpp-source-editor .cm-selectionMatch {
 	background: var(--background-modifier-hover);
 }
+
+.fpp-hl-time {
+	margin-left: var(--size-4-2);
+	color: var(--text-faint);
+}
+
+/* ---------- Comments in the margin (light DOM, slotted beside the text; see core/margin.ts) ---------- */
+.fpp-margin-notes {
+	display: none;
+	position: relative;
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-small);
+	line-height: var(--line-height-normal);
+	color: var(--fpp-fg, var(--text-normal));
+	-webkit-user-select: text;
+	user-select: text;
+}
+.fpp-margin-notes.is-visible {
+	display: block;
+}
+.fpp-margin-note {
+	display: none;
+	position: absolute;
+	left: 0;
+	right: 0;
+	box-sizing: border-box;
+	transition: top 160ms ease;
+}
+.fpp-margin-note.is-placed {
+	display: block;
+}
+.fpp-mc {
+	padding: var(--size-4-2) var(--size-4-3);
+	background: color-mix(in srgb, var(--fpp-fg, var(--text-normal)) 4%, var(--fpp-bg, var(--background-primary)));
+	border: var(--border-width) solid color-mix(in srgb, var(--fpp-fg, var(--text-normal)) 12%, transparent);
+	border-left: 3px solid var(--swatch);
+	border-radius: var(--radius-m);
+	cursor: default;
+}
+.fpp-mc.is-hovered,
+.fpp-mc:hover {
+	border-color: color-mix(in srgb, var(--fpp-fg, var(--text-normal)) 25%, transparent);
+	border-left-color: var(--swatch);
+}
+.fpp-mc.is-active {
+	z-index: 1;
+	box-shadow: var(--shadow-s);
+	background: var(--fpp-bg, var(--background-primary));
+}
+.fpp-mc-body > :first-child {
+	margin-top: 0;
+}
+.fpp-mc-body > :last-child {
+	margin-bottom: 0;
+}
+.fpp-mc-body {
+	overflow-wrap: break-word;
+}
+.fpp-mc-meta {
+	display: flex;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-1);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+.fpp-mc-source {
+	color: var(--text-accent);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+.fpp-mc-time {
+	flex: none;
+	margin-left: auto;
+}
+.fpp-mc-actions {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	display: none;
+	background: inherit;
+	border-radius: var(--radius-s);
+}
+.fpp-mc-actions .clickable-icon {
+	padding: 2px;
+}
+.fpp-mc-actions svg {
+	width: 14px;
+	height: 14px;
+}
+.fpp-mc:hover .fpp-mc-actions,
+.fpp-mc.is-active .fpp-mc-actions {
+	display: flex;
+}

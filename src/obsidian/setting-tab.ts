@@ -196,6 +196,15 @@ export class FppSettingTab extends PluginSettingTab {
 					await save();
 				}),
 			);
+		new Setting(containerEl)
+			.setName('Include last-updated time in links')
+			.setDesc('Adds "&updated=<time>" (UTC, e.g. 20261008T140312Z) when a highlight is created, and updates it when its color or comment changes.')
+			.addToggle((t) =>
+				t.setValue(s.timestampInLinks).onChange(async (v) => {
+					s.timestampInLinks = v;
+					await save();
+				}),
+			);
 		const targets = { split: 'Split pane', tab: 'New tab', current: 'Current tab' };
 		new Setting(containerEl)
 			.setName(`Open ${format.name} links in`)
@@ -330,6 +339,14 @@ export class FppSettingTab extends PluginSettingTab {
 		this.menuEditor(containerEl, 'Highlight menu', 'highlightMenu', (id) => HIGHLIGHT_MENU_LABELS[id] ?? id);
 
 		new Setting(containerEl).setName('Highlights').setHeading();
+		new Setting(containerEl)
+			.setName('Comments in the margin')
+			.setDesc(`Show comments beside the highlighted text, like Google Docs, when the pane is wide enough (otherwise they show on hover). Also: the "Toggle comments in the margin" command and the ${noun}'s tab menu.`)
+			.addToggle((t) =>
+				t.setValue(s.marginComments).onChange(async (v) => {
+					await this.plugin.setMarginComments(v);
+				}),
+			);
 		new Setting(containerEl)
 			.setName('Links without a color')
 			.setDesc('For links that have no "&color=…".')

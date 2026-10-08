@@ -21,3 +21,4 @@ export {
 } from './reader';
 export * from './settings';
 export { rangeToMarkdown } from './markdown';
+export { Margin, type MarginNote, type MarginOptions } from './margin';

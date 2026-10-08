@@ -15,6 +15,7 @@ Shared library of the PDF++-style Obsidian plugins (EPUB++, Transcript++, …): 
 src/core/       no Obsidian imports
   reader.ts     DocumentReader: shadow-root page, sections, highlights, annotation layers, flash, selection, search, events
   locator.ts    LocatorScheme registry, parseLocator, params; textFragmentScheme
+  margin.ts     Margin (`reader.margin`): notes beside the text, Google Docs style — light-DOM elements slotted into a column in the scroller, stacked without overlap; moves the text left, hides itself when too narrow
   lines.ts      line/column locators (L12C5-L14C3) for line-based formats
   text-index.ts, search.ts, text-fragment.ts, markdown.ts (range → Markdown), settings.ts (themes, base CSS)
 src/obsidian/
@@ -23,6 +24,7 @@ src/obsidian/
   view.ts       DocumentView (subclassable: buildExtraUi, onReaderReady, onNavigate, onTeardown, extendSelectionMenu, extendHighlightMenu)
   source-view.ts SourceView: the raw file, monospace with line numbers, `mode` read (divs) or edit (CodeMirror 6 from Obsidian: `@codemirror/*` are externals, devDependencies pinned to Obsidian's versions) (formats with `plainText`); `toggleSource(leaf, mode)` swaps views in the same tab
   embed.ts      DocumentEmbed (subclassable) for ![[file#…]] and hover previews
+  margin-comments.ts  MarginComments: highlight comments and providers' `note`s as cards in `reader.margin`
   sidebar.ts, setting-tab.ts, appearance.ts, highlight-index.ts, annotations.ts, comment-*.ts, annotation-tip.ts
   notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)
   patch.ts      around(): method patching that tolerates other plugins patching the same method
@@ -56,4 +58,6 @@ All CSS classes, data attributes, CSS variables and highlight names the library 
 - **Menus:** the color row and the Copy/Insert/Both row are custom DOM inside `item.dom` that stop pointer/touch/click events. `afterMenuHidden` / `keepPendingSelection` hand the pending selection between menus.
 - **Private APIs:** `app.embedRegistry`, `app.commands.removeCommand`, `app.setting.openTabById`, `app.emulateMobile`, `editor.cm.posAtDOM`, the `openLinkText` patch.
 - **Documents change on disk** (plain-text editing, sync): the plugin calls `view.reload()` (debounced); `reloading` is true during its `onTeardown` / `onReaderReady`, so subclasses can keep UI (Transcript++ keeps a playing player). The source view only writes after an edit (`dirty`), ignores the echo of its own save (`lastSaved`), and marks changes from disk `Transaction.remote` so they aren't saved back.
+- **Margin notes are light DOM:** they live in the reader host and are slotted (`<slot name="fpp-margin">`) into the shadow scroller, so they scroll with the text and get Obsidian's styles; clicks on them still reach the scroller's listeners (they aren't over any highlight). `Margin.set` reuses elements, and `className` resets on rebuilt cards are re-patched there.
+- **Link params:** `setLinkParam` edits `&key=` in a link's source; `&updated=` (ISO 8601 basic, UTC) is stamped on creation and by `setHighlightColor` / `setHighlightComment` when `timestampInLinks` is on.
 - **Settings:** `loadSettings` deep-clones defaults and migrates via `settingsVersion` (v4: `linkType` is `primary` | `text`). When adding copy formats or menu items, keep `syncMenus()` and `syncFormatCommands()` in mind.

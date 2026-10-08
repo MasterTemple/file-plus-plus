@@ -2,7 +2,7 @@ import { formatLocator, type DocumentReader, type ReaderSettings, type Selection
 import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, parseLinktext, type PaneType, type ViewState, type Workspace, type OpenViewState } from 'obsidian';
 import { around } from './patch';
 import { HighlightIndex, resolveFile, type HighlightEntry } from './highlight-index';
-import { formatLink, linkAt, renderTemplate, setCalloutColor, setLinkColor } from './link-utils';
+import { formatLink, linkAt, linkTimestamp, renderTemplate, setCalloutColor, setLinkColor, touchLink, UPDATED_PARAM } from './link-utils';
 import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AnnotationMode, type AppearancePlatform, type CopyAction, type Orientation, type CopyFormat, type FppSettings, type OpenTarget } from './settings';
 import { Annotations } from './annotations';
 import { askForComment, confirmDeleteHighlight } from './comment-modal';
@@ -147,6 +147,13 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 			open: (file, locator) => this.openDocument(file, locator ?? ''),
 			link: (file, locator, alias, sourcePath) => this.documentLink(file, locator, alias, null, sourcePath),
 		};
+	}
+
+	/** Show or hide comments in the margin of every open document. */
+	async setMarginComments(on: boolean): Promise<void> {
+		this.settings.marginComments = on;
+		await this.saveSettings();
+		for (const v of this.views()) v.refreshMargin();
 	}
 
 	/** Show or hide a provider's annotations in documents (the sidebar still lists them). */
@@ -735,7 +742,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	/** Add, change or (with '') remove the comment of a highlight in its note. */
 	async setHighlightComment(entry: HighlightEntry, comment: string): Promise<void> {
 		const file = this.app.vault.getFileByPath(entry.sourcePath);
-		if (!file) return;
+		if (!file || comment.trim() === (entry.comment ?? '')) return;
 		let failed = false;
 		await this.app.vault.process(file, (data) => {
 			let start = entry.position.start.offset;
@@ -746,8 +753,11 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return data;
 				}
 			}
-			const line = data.slice(0, start).split('\n').length - 1;
-			return setComment(data.split('\n'), line, comment, entry.color ?? null).join('\n');
+			const end = start + entry.original.length;
+			const stamped = this.stamp(entry.original);
+			const next = data.slice(0, start) + stamped + data.slice(end);
+			const line = next.slice(0, start).split('\n').length - 1;
+			return setComment(next.split('\n'), line, comment, entry.color ?? null).join('\n');
 		});
 		if (failed) this.notice('could not find the link in the note (it may have changed).');
 	}
@@ -792,12 +802,17 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 				}
 				end = start + entry.original.length;
 			}
-			const updated = setLinkColor(entry.original, color);
+			const updated = this.stamp(setLinkColor(entry.original, color));
 			const next = data.slice(0, start) + updated + data.slice(end);
 			const lineNo = next.slice(0, start).split('\n').length - 1;
 			return setCalloutColor(next.split('\n'), lineNo, color).join('\n');
 		});
 		if (failed) this.notice('could not find the link in the note (it may have changed).');
+	}
+
+	/** A highlight's link with `&updated=` set to now (when links carry timestamps). */
+	private stamp(link: string): string {
+		return this.settings.timestampInLinks ? touchLink(link) : link;
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -815,12 +830,13 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		const useText = (this.settings.linkType === 'text') !== alternate;
 		const locator = (useText && info.textFragment()) || info.locator;
 		const alias = renderTemplate(this.settings.aliasTemplate, { ...this.templateVars(view, info, color, ''), ...extra });
-		return this.documentLink(view.file!, locator, alias, this.settings.colorInLinks ? color : null);
+		const params = { [UPDATED_PARAM]: this.settings.timestampInLinks ? linkTimestamp() : undefined };
+		return this.documentLink(view.file!, locator, alias, this.settings.colorInLinks ? color : null, undefined, params);
 	}
 
-	/** A link (wiki or markdown, per settings) to a locator in a document. */
-	documentLink(file: TFile, locator: string, alias: string, color: string | null = null, sourcePath?: string): string {
-		const subpath = formatLocator(locator, { color: color ?? undefined });
+	/** A link (wiki or markdown, per settings) to a locator in a document; `params` follow the color. */
+	documentLink(file: TFile, locator: string, alias: string, color: string | null = null, sourcePath?: string, params: Record<string, string | undefined> = {}): string {
+		const subpath = formatLocator(locator, { color: color ?? undefined, ...params });
 		const from = sourcePath ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path ?? this.lastMarkdownPath() ?? '';
 		const linktext = this.app.metadataCache.fileToLinktext(file, from, false);
 		return formatLink(linktext, subpath, alias, this.linkStyle());
@@ -1006,6 +1022,16 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return true;
 				},
 			});
+		this.addCommand({
+			id: 'toggle-margin-comments',
+			name: 'Toggle comments in the margin',
+			callback: () => {
+				void this.setMarginComments(!this.settings.marginComments);
+				const shown = this.settings.marginComments;
+				const v = this.activeView();
+				if (shown && v?.reader && !v.marginComments.visible) this.notice(v.plugin.index.get(v.file?.path ?? '').some((e) => e.comment) ? 'the pane is too narrow for comments in the margin.' : `this ${this.format.noun} has no comments yet.`);
+			},
+		});
 		this.addCommand({ id: 'appearance', name: 'Reading appearance', checkCallback: withView((v) => v.toggleAppearance()) });
 		this.addCommand({ id: 'font-increase', name: 'Increase font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.min(48, this.readerSettings(v.file?.path).fontSize + 1) })) });
 		this.addCommand({ id: 'font-decrease', name: 'Decrease font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.max(8, this.readerSettings(v.file?.path).fontSize - 1) })) });

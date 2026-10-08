@@ -1,6 +1,7 @@
 import { isRangeLocator, parseLocator, type LocatorScheme } from '../core';
 import { headingLabel, parseHeadings } from './annotation-utils';
 import { getComment } from './comment-utils';
+import { parseLinkTimestamp, UPDATED_PARAM } from './link-utils';
 import { Events, TFile, parseLinktext, type App, type CachedMetadata, type Pos, type ReferenceCache } from 'obsidian';
 
 export interface HighlightEntry {
@@ -12,6 +13,8 @@ export interface HighlightEntry {
 	/** A range locator of one of the format's schemes (e.g. `epubcfi(...)`, `:~:text=...`). */
 	locator: string;
 	color?: string;
+	/** When the highlight was last changed (its link's `&updated=`), if recorded. */
+	updated?: Date | null;
 	subpath: string;
 	displayText: string;
 	original: string;
@@ -140,6 +143,7 @@ export class HighlightIndex extends Events {
 			locator: loc.locator,
 			sourcePath,
 			color: loc.params.color,
+			updated: parseLinkTimestamp(loc.params[UPDATED_PARAM]),
 			subpath,
 			displayText: ref.displayText ?? '',
 			original: ref.original,

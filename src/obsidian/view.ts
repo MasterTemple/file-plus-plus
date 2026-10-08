@@ -8,6 +8,7 @@ import { Sidebar } from './sidebar';
 import { CommentCard } from './comment-card';
 import { askForComment } from './comment-modal';
 import { AnnotationTip } from './annotation-tip';
+import { MarginComments, type ProviderNotes } from './margin-comments';
 import { layerId, type Annotation, type AnnotationContext, type AnnotationProvider } from './api';
 
 /** Annotations under the pointer, grouped by their provider. */
@@ -39,6 +40,10 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	private sidebar!: Sidebar;
 	private searchNavEl!: HTMLElement;
 	commentCard!: CommentCard;
+	/** Comments beside the text (see settings: `marginComments`). */
+	marginComments!: MarginComments;
+	/** Providers' annotations that have notes (shown in the margin), by layer. */
+	private providerNotes = new Map<string, ProviderNotes>();
 	private appearance!: AppearancePanel;
 	private pendingSubpath: string | null = null;
 	private loadToken = 0;
@@ -147,6 +152,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		navButton('chevron-down', 'Next result', 1);
 		this.appearance = new AppearancePanel(this.plugin, this.mainEl.createDiv('fpp-appearance'), () => this.file?.path);
 		this.commentCard = this.addChild(new CommentCard(this.app, this.mainEl));
+		this.marginComments = this.addChild(new MarginComments(this));
 		this.annotationTip = new AnnotationTip(this.mainEl);
 		this.register(() => this.annotationTip.destroy());
 		this.toggleSidebar(!Platform.isMobile && this.plugin.settings.sidebarOpen, false);
@@ -260,6 +266,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	private teardown(): void {
 		if (this.reader) this.onTeardown();
+		this.marginComments?.reset();
 		this.reader?.destroy();
 		if (this.document) this.plugin.format.unload(this.document);
 		this.reader = null;
@@ -354,6 +361,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		reader.on('external-link', (_e, url) => window.open(url, '_blank'));
 		reader.on('highlight-click', (e, specs) => {
 			const entries = specs.map((s) => s.data as HighlightEntry);
+			const commented = entries.find((x) => x.comment);
+			if (commented) this.marginComments.activateHighlight(commented);
 			if (Platform.isMobile) {
 				// Wait a moment: this tap may be the first half of a double tap, or the end of a hold.
 				const tappedAt = Date.now();
@@ -371,7 +380,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		reader.on('highlight-hover', (e, specs) => {
 			// Touch screens emit a mouse move for every tap; hover cards/previews are desktop-only.
 			if (Platform.isMobile) return;
-			this.commentCard.hover(e, specs.map((s) => s.data as HighlightEntry));
+			const entries = specs.map((s) => s.data as HighlightEntry);
+			// Comments in the margin are already visible: point at them instead of a hover card.
+			this.marginComments.hoverHighlights(entries);
+			if (this.marginComments.visible) this.commentCard.hide();
+			else this.commentCard.hover(e, entries);
 			if (!specs.length) return;
 			const entry = specs[0].data as HighlightEntry;
 			this.app.workspace.trigger('hover-link', {
@@ -452,6 +465,15 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		const specs: HighlightSpec<HighlightEntry>[] = entries.map((e) => ({ id: e.id, locator: e.locator, color: e.color, data: e }));
 		this.reader.setHighlights(specs);
 		this.sidebar.setHighlights(all);
+		this.refreshMargin();
+	}
+
+	/** Show (or hide) comments in the margin, per settings; when there is no room they show on hover. */
+	refreshMargin(): void {
+		if (!this.reader?.isRendered || !this.file) return;
+		const shown = new Set(this.reader.getHighlights().map((h) => h.id));
+		const entries = this.plugin.index.get(this.file.path).filter((e) => shown.has(e.id));
+		this.marginComments.update(entries, [...this.providerNotes.values()]);
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -475,11 +497,16 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		const hidden = this.plugin.settings.hiddenProviders.includes(provider.id);
 		reader.setLayer(layerId(provider.id), specs, { style: provider.style, hidden });
 		this.sidebar.setProvider(provider, hidden);
+		const withNotes = hidden ? [] : list.filter((a) => a.note);
+		const had = this.providerNotes.delete(layerId(provider.id));
+		if (withNotes.length) this.providerNotes.set(layerId(provider.id), { provider, layer: layerId(provider.id), annotations: withNotes });
+		if (had || withNotes.length) this.refreshMargin();
 	}
 
 	removeProvider(id: string): void {
 		this.reader?.removeLayer(layerId(id));
 		this.sidebar.removeProvider(id);
+		if (this.providerNotes.delete(layerId(id))) this.refreshMargin();
 	}
 
 	private groupHits(hits: LayerHit[]): AnnotationGroup[] {
@@ -1032,6 +1059,14 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			);
 		}
 		if (!this.file || !this.reader) return;
+		menu.addItem((i) =>
+			i
+				.setTitle('Comments in the margin')
+				.setIcon('message-square-text')
+				.setChecked(this.plugin.settings.marginComments)
+				.setSection('view')
+				.onClick(() => void this.plugin.setMarginComments(!this.plugin.settings.marginComments)),
+		);
 		const ann = this.plugin.annotations.find(this.file);
 		menu.addItem((i) =>
 			i

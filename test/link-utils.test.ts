@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { parseLocator, textFragmentScheme } from '../src/core';
-import { formatLink, linkAt, linksIn, renderTemplate, setCalloutColor, setLinkColor } from '../src/obsidian/link-utils';
+import { formatLink, linkAt, linksIn, linkTimestamp, parseLinkTimestamp, renderTemplate, setCalloutColor, setLinkColor, setLinkParam, touchLink } from '../src/obsidian/link-utils';
 
 const cfi = 'epubcfi(/6/14!/4/2,/1:0,/1:16)';
 
@@ -34,6 +34,27 @@ test('setLinkColor', () => {
 	expect(setLinkColor('![[talk.srt#t=109s]]', 'blue')).toBe('![[talk.srt#t=109s&color=blue]]');
 	expect(setLinkColor('[[talk.srt|no subpath]]', 'blue')).toBe('[[talk.srt|no subpath]]');
 	expect(setLinkColor('[x](a.epub#epubcfi(/6/4!/4/2,/1:0,/1:5)&color=red)', null)).toBe('[x](a.epub#epubcfi(/6/4!/4/2,/1:0,/1:5))');
+});
+
+test('setLinkParam keeps other params and their order', () => {
+	expect(setLinkParam(`[[a.epub#${cfi}&color=red|x]]`, 'updated', '20261008T140312Z')).toBe(`[[a.epub#${cfi}&color=red&updated=20261008T140312Z|x]]`);
+	expect(setLinkParam(`[[a.epub#${cfi}&updated=1&color=red|x]]`, 'updated', '2')).toBe(`[[a.epub#${cfi}&updated=2&color=red|x]]`);
+	expect(setLinkParam(`[[a.epub#${cfi}&updated=1&color=red]]`, 'updated', null)).toBe(`[[a.epub#${cfi}&color=red]]`);
+	expect(setLinkColor(`[[a.epub#${cfi}&updated=1|x]]`, 'red')).toBe(`[[a.epub#${cfi}&color=red&updated=1|x]]`);
+	expect(setLinkParam('[x](a.epub#epubcfi%28/6/4!/4/2/1%3A0%29&color=blue)', 'updated', '20261008T140312Z')).toBe('[x](a.epub#epubcfi%28/6/4!/4/2/1%3A0%29&color=blue&updated=20261008T140312Z)');
+});
+
+test('link timestamps', () => {
+	const d = new Date(Date.UTC(2026, 9, 8, 14, 3, 12, 345));
+	expect(linkTimestamp(d)).toBe('20261008T140312Z');
+	expect(parseLinkTimestamp('20261008T140312Z')?.getTime()).toBe(Date.UTC(2026, 9, 8, 14, 3, 12));
+	expect(parseLinkTimestamp('2026-10-08T14:03:12Z')?.getTime()).toBe(Date.UTC(2026, 9, 8, 14, 3, 12));
+	expect(parseLinkTimestamp('2026-10-08')?.getFullYear()).toBe(2026);
+	expect(parseLinkTimestamp('soon')).toBeNull();
+	expect(parseLinkTimestamp(undefined)).toBeNull();
+	expect(touchLink(`[[a.epub#${cfi}&updated=20200101T000000Z|x]]`, d)).toBe(`[[a.epub#${cfi}&updated=20261008T140312Z|x]]`);
+	const { params } = parseLocator(`${cfi}&color=red&updated=20261008T140312Z`.replace('epubcfi', ':~:text=a'), [textFragmentScheme]);
+	expect(params.updated).toBe('20261008T140312Z');
 });
 
 test('templates continue callout prefix', () => {

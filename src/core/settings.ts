@@ -106,6 +106,15 @@ export const BASE_CSS = /* css */ `
 	-webkit-touch-callout: default;
 }
 .fpp-scroller:focus { outline: none; }
+/* Notes beside the text (see margin.ts): the column scrolls with the content; notes are slotted in. */
+.fpp-margin {
+	position: absolute;
+	top: 0;
+	height: 0;
+	display: none;
+	font-size: initial;
+}
+.fpp-with-margin .fpp-margin { display: block; }
 .fpp-content {
 	box-sizing: content-box;
 	max-width: var(--fpp-max-width, none);

@@ -67,19 +67,60 @@ function subpathBounds(src: string): { start: number; end: number } | null {
 }
 
 /**
- * Set (or remove, when `color` is null) the `&color=` parameter of a link's source text. Parameters
- * follow the locator as `&key=value`; locators never contain a raw `&key=`, so the first one starts them.
+ * Set (or remove, when `value` is null) a `&key=` parameter of a link's source text. Parameters follow
+ * the locator as `&key=value`; locators never contain a raw `&key=`, so the first one starts them. An
+ * existing parameter is replaced in place; a new one goes first (`first`) or last.
  */
-export function setLinkColor(src: string, color: string | null): string {
+export function setLinkParam(src: string, key: string, value: string | null, first = false): string {
 	const b = subpathBounds(src);
 	if (!b) return src;
 	const sub = src.slice(b.start, b.end);
 	const p = sub.search(/&[\w-]+=/);
 	const locator = p === -1 ? sub : sub.slice(0, p);
-	let params = p === -1 ? '' : sub.slice(p);
-	params = params.replace(/&color=[^&]*/g, '');
-	if (color) params = `&color=${encodeURIComponent(color)}${params}`;
-	return src.slice(0, b.start) + locator + params + src.slice(b.end);
+	const params = p === -1 ? '' : sub.slice(p);
+	const re = new RegExp(`&${key}=[^&]*`, 'g');
+	const param = value ? `&${key}=${encodeURIComponent(value)}` : '';
+	let next: string;
+	if (param && re.test(params)) {
+		let done = false;
+		next = params.replace(re, () => (done ? '' : ((done = true), param)));
+	} else {
+		next = params.replace(re, '');
+		next = first ? param + next : next + param;
+	}
+	return src.slice(0, b.start) + locator + next + src.slice(b.end);
+}
+
+/** Set (or remove, when `color` is null) the `&color=` parameter of a link's source text. */
+export function setLinkColor(src: string, color: string | null): string {
+	return setLinkParam(src, 'color', color, true);
+}
+
+/** The parameter that records when a highlight was last changed (created, recolored, commented). */
+export const UPDATED_PARAM = 'updated';
+
+/**
+ * A timestamp for `&updated=`: ISO 8601 basic format in UTC (`20261008T140312Z`), which needs no
+ * escaping in wiki or markdown links and sorts as text.
+ */
+export function linkTimestamp(date: Date = new Date()): string {
+	return date.toISOString().replace(/[-:]|\.\d+/g, '');
+}
+
+/** Parse an `&updated=` value (basic or extended ISO 8601), or null. */
+export function parseLinkTimestamp(s: string | undefined): Date | null {
+	if (!s) return null;
+	const m = /^(\d{4})-?(\d{2})-?(\d{2})(?:T(\d{2}):?(\d{2})(?::?(\d{2}))?)?(Z)?$/.exec(s.trim());
+	if (!m) return null;
+	const [, y, mo, d, h = '0', mi = '0', sec = '0', z] = m;
+	const parts = [+y, +mo - 1, +d, +h, +mi, +sec] as const;
+	const date = z ? new Date(Date.UTC(...parts)) : new Date(...parts);
+	return isNaN(date.getTime()) ? null : date;
+}
+
+/** Stamp a link's source text with `&updated=` (now, unless `date` is given). */
+export function touchLink(src: string, date: Date = new Date()): string {
+	return setLinkParam(src, UPDATED_PARAM, linkTimestamp(date));
 }
 
 /**

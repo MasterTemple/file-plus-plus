@@ -6,6 +6,7 @@ import { TextIndex } from './text-index';
 import { Emitter } from './emitter';
 import { rangeToMarkdown } from './markdown';
 import { BASE_CSS, DEFAULT_SETTINGS, settingsToVars, type ReaderSettings } from './settings';
+import { Margin } from './margin';
 
 export interface HighlightSpec<T = unknown> {
 	id: string;
@@ -359,6 +360,33 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		const el = (node.nodeType === 1 ? (node as Element) : node.parentElement)?.closest('[data-fpp-section]');
 		if (!el || !this.content.contains(el)) return null;
 		return this.sectionByIndex.get(Number(el.getAttribute('data-fpp-section'))) ?? null;
+	}
+
+	// ---------------------------------------------------------------------------------------------
+	// Margin
+	// ---------------------------------------------------------------------------------------------
+
+	private marginLayer: Margin | null = null;
+
+	/** Notes beside the text, Google Docs style (see `Margin`); created on first use. */
+	get margin(): Margin {
+		if (!this.marginLayer) {
+			const reader = this;
+			this.marginLayer = new Margin({
+				host: this.host,
+				shadow: this.shadow,
+				scroller: this.scroller,
+				content: this.content,
+				win: this.win,
+				keepPosition(fn) {
+					const loc = reader.rendered ? (reader.currentAnchor() ?? reader.anchor) : null;
+					fn();
+					if (loc) reader.win.requestAnimationFrame(() => reader.scrollToRange(loc, { flash: false, position: 'top' }));
+				},
+				fallbackTop: (range) => this.sectionOf(range.startContainer)?.wrapper.getBoundingClientRect().top ?? null,
+			});
+		}
+		return this.marginLayer;
 	}
 
 	/** Ensure both ends of a range are inside section bodies. */
@@ -1019,6 +1047,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		this.win.clearTimeout(this.flashTimer);
 		this.win.cancelAnimationFrame(this.flashRaf);
 		for (const fn of this.cleanup) fn();
+		this.marginLayer?.destroy();
 		for (const name of this.highlightNames) this.registry?.delete(name);
 		for (const layer of this.layers.values()) for (const name of layer.names) this.registry?.delete(name);
 		for (const k of ['flash', 'search', 'search-current', 'hover', 'pending']) this.registry?.delete(this.hlName(k));

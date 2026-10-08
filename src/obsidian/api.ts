@@ -33,6 +33,11 @@ export interface Annotation<T = unknown> {
 	label: string;
 	/** A palette name or CSS color; default: the provider's `color`. */
 	color?: string;
+	/**
+	 * A note about the passage (Markdown), shown beside it in the margin like a highlight's comment
+	 * (when the user shows comments in the margin and the provider's annotations).
+	 */
+	note?: string;
 	data?: T;
 }
 

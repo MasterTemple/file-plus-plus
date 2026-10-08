@@ -66,6 +66,10 @@ export interface FppSettings {
 	lastColor?: string | null;
 	/** Include `&color=` in copied links. */
 	colorInLinks: boolean;
+	/** Stamp highlight links with `&updated=` when they are created and when their color or comment changes. */
+	timestampInLinks: boolean;
+	/** Show highlights' comments (and annotations' notes) beside the text, when the pane is wide enough. */
+	marginComments: boolean;
 	highlightOpacity: number;
 	linkType: LinkType;
 	linkStyle: LinkStyle;
@@ -175,6 +179,8 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	],
 	defaultColor: 'yellow',
 	colorInLinks: true,
+	timestampInLinks: true,
+	marginComments: true,
 	highlightOpacity: 0.4,
 	linkType: 'primary',
 	linkStyle: 'auto',
