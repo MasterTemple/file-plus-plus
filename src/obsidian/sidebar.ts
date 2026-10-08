@@ -116,6 +116,8 @@ export class Sidebar {
 	// --- TOC -------------------------------------------------------------------------------------
 
 	private renderToc(items: TocItem[], parent: HTMLElement): void {
+		// Entries without children line up with siblings that have a collapse arrow.
+		const arrows = items.some((i) => i.children.length);
 		for (const item of items) {
 			const wrap = parent.createDiv('tree-item fpp-toc-item');
 			const self = wrap.createDiv('tree-item-self is-clickable fpp-toc-self');
@@ -129,7 +131,7 @@ export class Sidebar {
 					wrap.toggleClass('is-collapsed', !wrap.hasClass('is-collapsed'));
 				});
 				if (item.depth >= 1) wrap.addClass('is-collapsed');
-			}
+			} else if (arrows) self.createDiv('fpp-toc-spacer');
 			self.createDiv({ cls: 'tree-item-inner', text: item.label || '(untitled)' });
 			if (item.href) self.addEventListener('click', () => this.view.goToToc(item));
 			else self.addClass('is-disabled');
@@ -327,6 +329,10 @@ export class Sidebar {
 		const eye = bar.createDiv({ cls: 'clickable-icon fpp-hl-eye', attr: { 'aria-label': hidden ? `Show highlights in the ${plugin.format.noun}` : `Hide highlights in the ${plugin.format.noun}` } });
 		setIcon(eye, hidden ? 'eye-off' : 'eye');
 		eye.addEventListener('click', () => void plugin.setHighlightsHidden(!hidden));
+		const margin = s.marginComments;
+		const comments = bar.createDiv({ cls: 'clickable-icon fpp-hl-eye', attr: { 'aria-label': margin ? 'Hide comments in the margin' : 'Show comments in the margin' } });
+		setIcon(comments, margin ? 'message-square-text' : 'message-square-off');
+		comments.addEventListener('click', () => void plugin.setMarginComments(!margin));
 
 		const counts = { all: this.hlEntries.length, annotation: this.hlEntries.filter(inAnn).length, other: this.hlEntries.filter((e) => !inAnn(e)).length };
 		const filters = el.createDiv('fpp-segmented fpp-hl-filters');

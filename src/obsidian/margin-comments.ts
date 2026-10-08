@@ -72,6 +72,7 @@ export class MarginComments extends Component {
 		}
 		margin.set(notes);
 		this.applyHover();
+		this.syncReveal();
 	}
 
 	/** The reader is going away: forget the cards (its margin removes their elements). */
@@ -79,6 +80,7 @@ export class MarginComments extends Component {
 		for (const c of this.cards.values()) this.removeChild(c.child);
 		this.cards.clear();
 		this.hovered.clear();
+		this.cardHover = null;
 	}
 
 	/** Highlights under the pointer in the text: mark their cards. */
@@ -90,6 +92,22 @@ export class MarginComments extends Component {
 	/** Bring the card of a highlight next to its passage (a highlight was clicked). */
 	activateHighlight(entry: HighlightEntry): void {
 		if (entry.comment && this.visible) this.view.reader?.margin.setActive(`hl:${entry.id}`);
+		this.syncReveal();
+	}
+
+	/** The highlight whose card the pointer is on, if any. */
+	private cardHover: string | null = null;
+
+	/**
+	 * With highlights hidden, the passage of the comment being looked at (hovered or selected) is
+	 * still drawn, so you can see what it is about.
+	 */
+	private syncReveal(): void {
+		const reader = this.view.reader;
+		if (!reader) return;
+		const active = reader.margin.activeId;
+		const ids = [this.cardHover, active?.startsWith('hl:') ? active.slice(3) : null].filter((x): x is string => !!x);
+		reader.setRevealedHighlights(ids);
 	}
 
 	private applyHover(): void {
@@ -169,12 +187,23 @@ export class MarginComments extends Component {
 	/** Hover, click and right-click on a card. `highlightIds`: highlights to emphasize while hovering. */
 	private bindCard(el: HTMLElement, id: string, highlightIds: string[], menu: (menu: Menu) => void): void {
 		const reader = () => this.view.reader;
-		el.addEventListener('mouseenter', () => highlightIds.length && reader()?.setHoveredHighlights(highlightIds));
-		el.addEventListener('mouseleave', () => highlightIds.length && reader()?.setHoveredHighlights([]));
+		el.addEventListener('mouseenter', () => {
+			if (!highlightIds.length) return;
+			this.cardHover = highlightIds[0];
+			this.syncReveal();
+			reader()?.setHoveredHighlights(highlightIds);
+		});
+		el.addEventListener('mouseleave', () => {
+			if (!highlightIds.length) return;
+			this.cardHover = null;
+			this.syncReveal();
+			reader()?.setHoveredHighlights([]);
+		});
 		el.addEventListener('click', (ev) => {
 			if ((ev.target as HTMLElement).closest('a')) return;
 			const margin = reader()?.margin;
 			if (margin) margin.setActive(margin.activeId === id ? null : id);
+			this.syncReveal();
 		});
 		el.addEventListener('contextmenu', (ev) => {
 			ev.preventDefault();

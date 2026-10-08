@@ -653,6 +653,21 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return this.highlightsHidden;
 	}
 
+	private revealed = new Set<string>();
+
+	/** While highlights are hidden, still draw these (e.g. the one whose comment is being looked at). */
+	setRevealedHighlights(ids: string[]): void {
+		const next = new Set(ids);
+		if (next.size === this.revealed.size && ids.every((id) => this.revealed.has(id))) return;
+		this.revealed = next;
+		if (this.highlightsHidden) this.refreshHighlights();
+	}
+
+	/** Whether a highlight is drawn (and reacts to the pointer). */
+	private isDrawn(id: string): boolean {
+		return !this.highlightsHidden || this.revealed.has(id);
+	}
+
 	private cachedRange(locator: string): Range | null {
 		if (!this.rendered) return null;
 		if (!this.rangeCache.has(locator)) this.rangeCache.set(locator, this.resolve(locator));
@@ -676,7 +691,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		const groups = new Map<string, { css: string; ranges: Range[] }>();
 		for (const h of this.highlights) {
 			if (!h.range) h.range = this.cachedRange(h.spec.locator);
-			if (!h.range || this.highlightsHidden) continue;
+			if (!h.range || !this.isDrawn(h.spec.id)) continue;
 			const { key, css } = this.colorKey(h.spec.color);
 			let g = groups.get(key);
 			if (!g) groups.set(key, (g = { css, ranges: [] }));
@@ -722,9 +737,8 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	/** Highlights under a viewport point. */
 	highlightsAt(x: number, y: number): HighlightSpec[] {
 		const out: HighlightSpec[] = [];
-		if (this.highlightsHidden) return out;
 		for (const h of this.highlights) {
-			if (!h.range) continue;
+			if (!h.range || !this.isDrawn(h.spec.id)) continue;
 			for (const r of Array.from(h.range.getClientRects())) {
 				if (x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1) {
 					out.push(h.spec);

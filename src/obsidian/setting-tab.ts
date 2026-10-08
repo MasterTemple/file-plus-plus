@@ -341,11 +341,11 @@ export class FppSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName('Highlights').setHeading();
 		new Setting(containerEl)
 			.setName('Show highlights')
-			.setDesc(`Draw links from your notes as highlights in ${noun}s. Off: the sidebar still lists them, but the text is left plain (with their margin comments). Also the eye button in the Highlights tab and the "Show / hide highlights" command.`)
+			.setDesc(`Draw links from your notes as highlights in ${noun}s. Off: the text is left plain, but the sidebar still lists them and comments in the margin still show; hovering or selecting a comment shows its highlight. Also the eye button in the Highlights tab and the "Show / hide highlights" command.`)
 			.addToggle((t) => t.setValue(!s.hideHighlights).onChange((v) => this.plugin.setHighlightsHidden(!v)));
 		new Setting(containerEl)
 			.setName('Comments in the margin')
-			.setDesc(`Show comments beside the highlighted text, like Google Docs, when the pane is wide enough (otherwise they show on hover). Also: the "Toggle comments in the margin" command and the ${noun}'s tab menu.`)
+			.setDesc(`Show comments beside the highlighted text, like Google Docs, when the pane is wide enough (otherwise they show on hover). Independent of "Show highlights". Also: the comment button in the Highlights tab, the "Toggle comments in the margin" command and the ${noun}'s tab menu.`)
 			.addToggle((t) =>
 				t.setValue(s.marginComments).onChange(async (v) => {
 					await this.plugin.setMarginComments(v);
