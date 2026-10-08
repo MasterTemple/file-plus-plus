@@ -1,0 +1,27 @@
+{
+  "name": "file-plus-plus",
+  "version": "0.1.0",
+  "description": "Shared engine for PDF++-style Obsidian plugins (EPUB++, Transcript++): documents rendered as one page, links from notes as highlights.",
+  "type": "module",
+  "exports": {
+    "./core": "./src/core/index.ts",
+    "./obsidian": "./src/obsidian/index.ts",
+    "./notes": "./src/obsidian/notes.ts",
+    "./build": "./build/plugin.ts",
+    "./styles.css": "./styles.css"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "peerDependencies": {
+    "obsidian": "*"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.5",
+    "@types/bun": "^1.4.2",
+    "esbuild": "^0.28.2",
+    "obsidian": "^1.13.1",
+    "typescript": "^7.0.2"
+  }
+}

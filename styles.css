@@ -1,0 +1,849 @@
+/* ---------- EPUB++ view layout ---------- */
+.fpp-view.view-content {
+	container: fpp-view / inline-size;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	position: relative;
+}
+.fpp-toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	padding: var(--size-4-1) var(--size-4-2);
+	border-bottom: var(--border-width) solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	flex: 0 0 auto;
+	min-height: 36px;
+}
+.fpp-toolbar-center {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	align-items: baseline;
+	gap: var(--size-4-2);
+	justify-content: center;
+}
+.fpp-toolbar-title {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+.fpp-toolbar-progress {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+.fpp-palette {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	padding: 0 var(--size-4-1);
+}
+.fpp-swatch,
+.fpp-menu-swatch {
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: var(--swatch);
+	border: 1px solid var(--background-modifier-border);
+	cursor: pointer;
+	flex: 0 0 auto;
+}
+.fpp-menu-swatch {
+	display: inline-block;
+	vertical-align: -2px;
+	margin-inline-end: 8px;
+	cursor: inherit;
+}
+.fpp-swatch.is-active {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+.fpp-swatch-none {
+	background: linear-gradient(135deg, transparent 45%, var(--text-faint) 45% 55%, transparent 55%);
+}
+
+.fpp-main {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+}
+.fpp-reader-host {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+}
+.fpp-error {
+	padding: var(--size-4-8);
+	color: var(--text-error);
+}
+
+/* ---------- Sidebar ---------- */
+.fpp-sidebar {
+	display: none;
+	flex: 0 0 var(--fpp-sidebar-width, 280px);
+	flex-direction: column;
+	min-height: 0;
+	border-inline-end: var(--border-width) solid var(--background-modifier-border);
+	background: var(--background-secondary);
+}
+.fpp-sidebar-open .fpp-sidebar {
+	display: flex;
+}
+.fpp-sidebar-backdrop {
+	display: none;
+}
+.fpp-sidebar-tabs {
+	display: flex;
+	gap: var(--size-4-1);
+	padding: var(--size-4-1) var(--size-4-2);
+	border-bottom: var(--border-width) solid var(--background-modifier-border);
+}
+.fpp-sidebar-tab.is-active {
+	color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+}
+.fpp-sidebar-close {
+	margin-inline-start: auto;
+}
+.fpp-sidebar-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+}
+.fpp-panel {
+	display: none;
+	flex: 1 1 auto;
+	flex-direction: column;
+	overflow-y: auto;
+	padding: var(--size-4-2) var(--size-4-1);
+}
+.fpp-panel.is-active {
+	display: flex;
+}
+.fpp-empty {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	padding: var(--size-4-2);
+}
+
+/* TOC */
+.fpp-toc-self {
+	font-size: var(--font-ui-small);
+	padding-block: 3px;
+	border-radius: var(--radius-s);
+	display: flex;
+	align-items: flex-start;
+}
+.fpp-toc-self .tree-item-inner {
+	white-space: normal;
+}
+.fpp-toc-self.is-active {
+	background: var(--background-modifier-active-hover);
+	color: var(--text-accent);
+}
+.fpp-toc-self.is-disabled {
+	color: var(--text-faint);
+	cursor: default;
+}
+.fpp-toc-item.is-collapsed > .tree-item-children {
+	display: none;
+}
+.fpp-toc-item.is-collapsed > .tree-item-self .fpp-toc-toggle svg {
+	transform: rotate(-90deg);
+}
+.fpp-toc-toggle {
+	cursor: pointer;
+}
+
+/* Search */
+.fpp-panel-search {
+	overflow: hidden;
+}
+.fpp-search-row input {
+	width: 100%;
+}
+.fpp-search-toggles {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin: var(--size-4-2) 0;
+}
+.fpp-search-toggle {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	padding: 2px 6px;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	cursor: pointer;
+	color: var(--text-muted);
+}
+.fpp-search-toggle.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+.fpp-search-nav {
+	margin-inline-start: auto;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+.fpp-search-info {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	margin-inline-end: 4px;
+	font-variant-numeric: tabular-nums;
+}
+.fpp-search-results {
+	flex: 1 1 auto;
+	overflow-y: auto;
+}
+.fpp-search-group {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	font-weight: var(--font-semibold);
+	padding: var(--size-4-2) var(--size-4-1) 2px;
+	position: sticky;
+	top: 0;
+	background: var(--background-secondary);
+}
+.fpp-search-result {
+	font-size: var(--font-ui-small);
+	padding: 4px var(--size-4-2);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	line-height: 1.4;
+}
+.fpp-search-result:hover {
+	background: var(--background-modifier-hover);
+}
+.fpp-search-result.is-active {
+	background: var(--background-modifier-active-hover);
+}
+.fpp-search-result mark.fpp-search-match {
+	/* Same colors as the in-book search highlights (core reader), independent of the theme's <mark>. */
+	background-color: rgba(255, 170, 0, 0.4);
+	color: var(--text-normal);
+	font-weight: var(--font-semibold);
+	border-radius: 2px;
+	padding: 0 1px;
+}
+.fpp-search-result.is-active mark.fpp-search-match {
+	background-color: rgba(255, 120, 0, 0.8);
+	color: black;
+}
+
+/* Highlights list */
+.fpp-hl-item {
+	border-inline-start: 4px solid var(--swatch);
+	padding: 6px 8px;
+	margin: 0 2px 8px;
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+}
+.fpp-hl-item:hover {
+	background: var(--background-modifier-hover);
+}
+.fpp-hl-meta {
+	margin-top: 4px;
+	font-size: var(--font-ui-smaller);
+}
+.fpp-hl-note {
+	color: var(--text-accent);
+}
+
+/* ---------- Appearance popover ---------- */
+.fpp-appearance {
+	display: none;
+	position: absolute;
+	top: var(--size-4-2);
+	right: var(--size-4-2);
+	z-index: var(--layer-popover);
+	width: min(420px, calc(100% - 2 * var(--size-4-2)));
+	max-height: calc(100% - 2 * var(--size-4-2));
+	overflow-y: auto;
+	background: var(--background-primary);
+	border: var(--border-width) solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-l);
+	padding: var(--size-4-2) var(--size-4-4);
+}
+.fpp-appearance.is-open {
+	display: block;
+}
+.fpp-appearance-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+.fpp-appearance-title {
+	font-weight: var(--font-semibold);
+}
+.fpp-appearance .setting-item {
+	padding-block: var(--size-4-2);
+}
+.fpp-number {
+	width: 5em;
+}
+.fpp-template {
+	font-family: var(--font-monospace);
+	min-width: 24em;
+}
+
+/* ---------- Mobile layout / narrow panes: sidebar becomes a drawer ---------- */
+.fpp-mobile .fpp-toolbar {
+	padding: 2px var(--size-4-1);
+}
+.fpp-mobile .fpp-sidebar {
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: min(88%, 360px);
+	z-index: calc(var(--layer-popover) - 1);
+	box-shadow: var(--shadow-l);
+}
+.fpp-mobile.fpp-view .fpp-sidebar-open .fpp-sidebar-backdrop {
+	display: block;
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.3);
+	z-index: calc(var(--layer-popover) - 2);
+}
+@container fpp-view (max-width: 640px) {
+	.fpp-sidebar {
+		position: absolute;
+		inset: 0 auto 0 0;
+		width: min(88%, 340px);
+		z-index: calc(var(--layer-popover) - 1);
+		box-shadow: var(--shadow-l);
+	}
+	.fpp-sidebar-open .fpp-sidebar-backdrop {
+		display: block;
+		position: absolute;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.25);
+		z-index: calc(var(--layer-popover) - 2);
+	}
+	.fpp-toolbar-progress {
+		display: none;
+	}
+}
+.fpp-phone .fpp-palette {
+	display: none;
+}
+.fpp-phone .fpp-toolbar-title {
+	font-size: var(--font-ui-smaller);
+}
+.fpp-phone .fpp-appearance {
+	top: auto;
+	bottom: 0;
+	right: 0;
+	left: 0;
+	width: 100%;
+	max-height: 70%;
+	border-radius: var(--radius-l) var(--radius-l) 0 0;
+	padding-bottom: calc(var(--size-4-4) + env(safe-area-inset-bottom, 0px));
+}
+
+/* Dependent setting rows (shown when their toggle/dropdown enables them) */
+.setting-item.fpp-subsetting {
+	border-top: none;
+	padding-top: 0;
+	padding-inline-start: var(--size-4-4);
+}
+
+/* ---------- Embeds & hover previews ---------- */
+.fpp-embed {
+	border: var(--border-width) solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	overflow: hidden;
+	background: var(--background-primary);
+}
+.popover.hover-popover .fpp-embed {
+	/* the reader host has no intrinsic width (contain: strict) */
+	width: min(560px, 90vw);
+	border: none;
+	border-radius: 0;
+}
+.fpp-embed-header {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-1) var(--size-4-2);
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	background: var(--background-secondary);
+	border-bottom: var(--border-width) solid var(--background-modifier-border);
+	cursor: pointer;
+}
+.fpp-embed-header:hover {
+	color: var(--text-normal);
+}
+.fpp-embed-icon {
+	display: flex;
+}
+.fpp-embed-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.fpp-embed-host {
+	position: relative;
+	width: 100%;
+}
+
+/* ---------- Floating search navigation ---------- */
+.fpp-search-float {
+	display: none;
+	position: absolute;
+	top: var(--size-4-2);
+	right: calc(var(--size-4-4) + 4px);
+	z-index: 5;
+	flex-direction: column;
+	gap: 2px;
+	padding: 2px;
+	background: var(--background-primary);
+	border: var(--border-width) solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+.fpp-search-float.is-visible {
+	display: flex;
+}
+.fpp-mobile .fpp-search-float .clickable-icon {
+	padding: var(--size-4-2);
+}
+
+/* ---------- Mobile drawer spacing ---------- */
+body.fpp-drawer-open .mobile-navbar {
+	display: none;
+}
+.fpp-mobile .fpp-sidebar-tabs {
+	padding: var(--size-4-2) var(--size-4-4);
+	gap: var(--size-4-2);
+}
+.fpp-mobile .fpp-panel {
+	padding: var(--size-4-3) var(--size-4-4) calc(var(--size-4-6) + env(safe-area-inset-bottom, 0px));
+}
+.fpp-mobile .fpp-toc-self {
+	padding-block: 7px;
+}
+.fpp-mobile .fpp-search-result {
+	padding: 8px var(--size-4-2);
+}
+.fpp-mobile .fpp-search-toggles {
+	margin: var(--size-4-3) 0;
+}
+.fpp-mobile .fpp-sidebar-open .fpp-search-float {
+	display: none;
+}
+@container fpp-view (max-width: 640px) {
+	.fpp-sidebar-open .fpp-search-float {
+		display: none;
+	}
+}
+
+/* ---------- Color row at the top of menus (one line; scrolls sideways when it doesn't fit) ---------- */
+.menu-item.fpp-color-row {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 10px;
+	overflow-x: auto;
+	scrollbar-width: none;
+	/* Don't widen the menu: take its width from the other items and scroll. */
+	contain: inline-size;
+	padding: 6px 8px;
+	cursor: default;
+}
+.menu-item.fpp-color-row::-webkit-scrollbar {
+	display: none;
+}
+.menu-item.fpp-color-row:hover,
+.menu-item.fpp-color-row.selected {
+	background: transparent;
+}
+.menu-item.fpp-color-row .fpp-swatch {
+	width: 18px;
+	height: 18px;
+}
+.is-mobile .menu-item.fpp-color-row {
+	gap: 14px;
+	padding: 10px 12px;
+}
+.is-mobile .menu-item.fpp-color-row .fpp-swatch {
+	width: 26px;
+	height: 26px;
+}
+
+/* ---------- Comment modal ---------- */
+.fpp-comment-quote {
+	margin: 0 0 var(--size-4-3);
+	padding: var(--size-4-1) var(--size-4-3);
+	border-inline-start: 3px solid var(--interactive-accent);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	max-height: 8em;
+	overflow-y: auto;
+}
+.fpp-comment-input {
+	width: 100%;
+	min-height: 6em;
+	resize: vertical;
+}
+.fpp-comment-modal .setting-item {
+	border-top: none;
+	padding-bottom: 0;
+}
+
+/* ---------- Menu editor (settings) ---------- */
+.fpp-menu-editor {
+	margin: 0 0 var(--size-4-4) var(--size-4-4);
+}
+.fpp-menu-editor .setting-item.fpp-menu-editor-row {
+	padding-block: var(--size-4-1);
+	border-top: none;
+}
+.fpp-menu-editor-row.is-hidden-item .setting-item-name {
+	color: var(--text-faint);
+	text-decoration: line-through;
+}
+
+/* ---------- Appearance panel rows ---------- */
+body.fpp-appearance-open .mobile-navbar {
+	display: none;
+}
+.fpp-appearance .setting-item,
+.fpp-appearance .setting-item.fpp-subsetting {
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: var(--size-4-3);
+	min-height: 3.25em;
+	padding: var(--size-4-2) var(--size-4-3);
+	border-top: none;
+}
+.fpp-appearance .setting-item.fpp-subsetting {
+	margin-top: var(--size-4-1);
+}
+.fpp-appearance .setting-item-info {
+	align-self: center;
+	flex: 1 1 40%;
+	min-width: 0;
+	margin: 0;
+}
+.fpp-appearance .setting-item-control {
+	flex: 1 1 60%;
+	justify-content: flex-end;
+	min-width: 0;
+}
+.fpp-appearance .setting-item-control input[type='range'] {
+	flex: 1 1 auto;
+	width: auto;
+	min-width: 72px;
+	max-width: 240px;
+}
+
+/* ---------- Annotation mode row (selection menu) ---------- */
+.menu-item.fpp-mode-row {
+	display: flex;
+	gap: 0;
+	padding: var(--size-4-1);
+	cursor: default;
+}
+.menu-item.fpp-mode-row:hover,
+.menu-item.fpp-mode-row.selected {
+	background: transparent;
+}
+.fpp-mode-button {
+	flex: 1 1 0;
+	text-align: center;
+	padding: 4px 8px;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	border: var(--border-width) solid var(--background-modifier-border);
+	cursor: pointer;
+}
+.fpp-mode-button + .fpp-mode-button {
+	border-inline-start: none;
+}
+.fpp-mode-button:first-child {
+	border-radius: var(--radius-s) 0 0 var(--radius-s);
+}
+.fpp-mode-button:last-child {
+	border-radius: 0 var(--radius-s) var(--radius-s) 0;
+}
+.fpp-mode-button:hover {
+	background: var(--background-modifier-hover);
+}
+.fpp-mode-button.is-active {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+.is-mobile .fpp-mode-button {
+	padding: 10px 8px;
+	font-size: var(--font-ui-medium);
+}
+
+/* ---------- Highlights tab toolbar ---------- */
+.fpp-hl-toolbar {
+	display: flex;
+	margin: 0 2px var(--size-4-2);
+}
+.fpp-hl-annotation-button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	justify-content: center;
+}
+.fpp-hl-annotation-button svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* ---------- Highlight comment card ---------- */
+.fpp-comment-card {
+	display: none;
+	position: absolute;
+	z-index: 6;
+	width: min(360px, calc(100% - 16px));
+	max-height: 40%;
+	overflow: hidden;
+	padding: var(--size-4-2) var(--size-4-3);
+	background: var(--background-primary);
+	border: var(--border-width) solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-l);
+	pointer-events: none;
+	font-size: var(--font-ui-small);
+}
+.fpp-comment-card.is-visible {
+	display: block;
+}
+.fpp-comment-card.is-pinned {
+	top: var(--size-4-2);
+	left: var(--size-4-2);
+	right: var(--size-4-2);
+	width: auto;
+	pointer-events: auto;
+	overflow-y: auto;
+}
+.fpp-comment-card-item + .fpp-comment-card-item {
+	margin-top: var(--size-4-2);
+	padding-top: var(--size-4-2);
+	border-top: var(--border-width) solid var(--background-modifier-border);
+}
+.fpp-comment-card .markdown-rendered > :first-child {
+	margin-top: 0;
+}
+.fpp-comment-card .markdown-rendered > :last-child {
+	margin-bottom: 0;
+}
+.fpp-comment-card-source {
+	margin-top: var(--size-4-1);
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+/* ---------- Highlights tab: filters, grouping, comments ---------- */
+.fpp-segmented {
+	display: flex;
+	margin: 0 2px var(--size-4-2);
+}
+.fpp-segmented .fpp-mode-button {
+	padding: 3px 4px;
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.fpp-hl-group-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--size-4-2);
+	margin: 0 2px var(--size-4-2);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+.fpp-hl-group-row select {
+	font-size: var(--font-ui-smaller);
+}
+.fpp-hl-group {
+	margin: var(--size-4-3) 2px var(--size-4-1);
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+}
+.fpp-hl-comment {
+	margin-top: 6px;
+	padding: 4px 8px;
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+	font-size: var(--font-ui-small);
+}
+.fpp-hl-comment > :first-child {
+	margin-top: 0;
+}
+.fpp-hl-comment > :last-child {
+	margin-bottom: 0;
+}
+.fpp-hl-note {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.fpp-hl-note-icon svg {
+	width: 12px;
+	height: 12px;
+}
+.fpp-mobile .fpp-segmented .fpp-mode-button {
+	padding: 8px 4px;
+}
+
+/* ---------- Collapsible highlight groups ---------- */
+.fpp-hl-group.is-clickable {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	cursor: pointer;
+	user-select: none;
+}
+.fpp-hl-group.is-clickable:hover {
+	color: var(--text-normal);
+}
+.fpp-hl-group-chevron {
+	display: flex;
+	transition: transform 120ms ease;
+}
+.fpp-hl-group-chevron svg {
+	width: 14px;
+	height: 14px;
+}
+.fpp-hl-group.is-collapsed .fpp-hl-group-chevron {
+	transform: rotate(-90deg);
+}
+.fpp-hl-group-count {
+	margin-inline-start: auto;
+	color: var(--text-faint);
+	font-weight: normal;
+}
+.fpp-hl-group-row .fpp-hl-collapse-all {
+	margin-inline-start: auto;
+}
+.fpp-hl-group-row select {
+	margin-inline-start: auto;
+}
+.fpp-hl-group-row select + .fpp-hl-collapse-all {
+	margin-inline-start: 0;
+}
+
+/* ---------- Comment modal on mobile: directly above the keyboard (positioned from JS) ---------- */
+.modal-container.fpp-comment-container {
+	align-items: flex-start;
+}
+.modal-container.fpp-comment-container .modal.fpp-comment-modal {
+	margin-top: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+}
+.modal-container.fpp-comment-container .fpp-comment-quote {
+	max-height: 4.5em;
+}
+.modal-container.fpp-comment-container .fpp-comment-input {
+	min-height: 4.5em;
+}
+.modal-container.fpp-comment-container .setting-item {
+	padding-top: var(--size-4-2);
+}
+
+/* ---------- Annotations from other plugins ---------- */
+.fpp-annotation-tip {
+	display: none;
+	position: absolute;
+	z-index: 6;
+	max-width: min(320px, calc(100% - 16px));
+	padding: var(--size-4-1) var(--size-4-2);
+	background: var(--background-primary);
+	border: var(--border-width) solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	box-shadow: var(--shadow-s);
+	pointer-events: none;
+	font-size: var(--font-ui-small);
+	white-space: pre-line;
+}
+.fpp-annotation-tip.is-visible {
+	display: block;
+}
+.fpp-provider-toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin: 0 2px var(--size-4-2);
+}
+.fpp-provider-name {
+	flex: 1;
+	font-weight: var(--font-semibold);
+}
+.fpp-provider-label {
+	font-weight: var(--font-medium);
+}
+.fpp-provider-text {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+/* ---------- Appearance scope (all books / this book) ---------- */
+.fpp-appearance-scope {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-2);
+}
+.fpp-appearance-scope .fpp-segmented {
+	margin: 0;
+	flex: 1;
+}
+.fpp-appearance-note {
+	margin: var(--size-4-1) 0 var(--size-4-2);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+.fpp-appearance .setting-item.fpp-overridden {
+	box-shadow: inset 3px 0 0 var(--interactive-accent);
+}
+
+/* ---------- Collapsible chapters in annotation provider tabs ---------- */
+.fpp-provider-group {
+	display: flex;
+	align-items: flex-start;
+	gap: 4px;
+	cursor: pointer;
+	user-select: none;
+	z-index: 1;
+}
+.fpp-provider-group:hover {
+	color: var(--text-normal);
+}
+.fpp-provider-group-title {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.fpp-provider-group.is-collapsed .fpp-hl-group-chevron {
+	transform: rotate(-90deg);
+}
+/* Items line up with the heading text (after its 4px padding, 14px chevron and 4px gap). */
+.fpp-provider-group-items .fpp-search-result {
+	padding-inline-start: calc(var(--size-4-1) + 14px + 4px);
+}

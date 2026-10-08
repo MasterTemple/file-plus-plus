@@ -1,0 +1,14 @@
+export * from './format';
+export * from './api';
+export { FilePlusPlusPlugin, type CopyTarget } from './plugin';
+export { DocumentView } from './view';
+export { DocumentEmbed, type EmbedContext } from './embed';
+export { HighlightIndex, resolveFile, type HighlightEntry } from './highlight-index';
+export { Annotations } from './annotations';
+export * from './annotation-utils';
+export * from './comment-utils';
+export * from './link-utils';
+export * from './settings';
+export { around } from './patch';
+export { askForComment, confirmDeleteHighlight } from './comment-modal';
+export { buildAppearanceControls, type AppearanceTarget } from './appearance';
