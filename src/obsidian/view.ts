@@ -46,6 +46,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	private providerNotes = new Map<string, ProviderNotes>();
 	private appearance!: AppearancePanel;
 	private pendingSubpath: string | null = null;
+	/** Whether the pending jump flashes its passage (a link does; a position restored from history doesn't). */
+	private pendingFlash = true;
 	private loadToken = 0;
 	private offIndex: (() => void) | null = null;
 	private annotationTip!: AnnotationTip;
@@ -231,9 +233,10 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			this.refreshHighlights();
 			for (const p of this.plugin.providers.values()) void this.updateProvider(p);
 			this.onReaderReady(reader);
-			const target = this.pendingSubpath ?? s.positions[file.path];
+			const pending = this.pendingSubpath;
+			const target = pending ?? s.positions[file.path];
 			this.pendingSubpath = null;
-			if (target) this.navigate(target, target !== s.positions[file.path]);
+			if (target) this.navigate(target, !!pending && this.pendingFlash && target !== s.positions[file.path]);
 		} catch (e) {
 			console.error('[fpp] failed to open', file.path, e);
 			const name = this.plugin.format.name;
@@ -279,11 +282,26 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	// Navigation / state
 	// --------------------------------------------------------------------------------------------
 
+	/**
+	 * The reading position goes into Obsidian's navigation history (and the workspace), so back /
+	 * forward return to the place you were at, not the top.
+	 */
+	override getEphemeralState(): Record<string, unknown> {
+		const state = super.getEphemeralState();
+		const position = this.reader?.isRendered ? this.reader.getLocation()?.locator : null;
+		return position ? { ...state, position } : state;
+	}
+
 	override setEphemeralState(state: unknown): void {
-		const subpath = (state as { subpath?: string } | null)?.subpath;
-		if (subpath) {
-			if (this.reader?.isRendered) this.navigate(subpath);
-			else this.pendingSubpath = subpath;
+		const s = state as { subpath?: string; position?: unknown } | null;
+		// A link's subpath wins; otherwise a position from history is restored without a flash.
+		const target = s?.subpath || (typeof s?.position === 'string' ? s.position : null);
+		if (target) {
+			if (this.reader?.isRendered) this.navigate(target, !!s?.subpath);
+			else {
+				this.pendingSubpath = target;
+				this.pendingFlash = !!s?.subpath;
+			}
 		}
 		super.setEphemeralState(state);
 	}
@@ -292,6 +310,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	navigate(subpath: string, flash = true): boolean {
 		if (!this.reader) {
 			this.pendingSubpath = subpath;
+			this.pendingFlash = flash;
 			return false;
 		}
 		const loc = this.reader.parse(subpath);

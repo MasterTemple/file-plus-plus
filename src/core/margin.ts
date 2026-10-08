@@ -49,6 +49,8 @@ export class Margin {
 	private active: string | null = null;
 	private shown = false;
 	private width = 0;
+	/** The scroller width the text's position was computed for. */
+	private avail = 0;
 	private raf = 0;
 	private readonly column: HTMLElement;
 	private readonly container: HTMLElement;
@@ -137,10 +139,11 @@ export class Margin {
 		const { gap, minText, minWidth, maxWidth } = this.opts;
 		const width = Math.min(maxWidth, avail - gap - minText);
 		const show = this.enabled && this.notes.some((n) => n.range) && avail > 0 && width >= minWidth;
-		if (show !== this.shown || (show && width !== this.width)) {
+		if (show !== this.shown || (show && (width !== this.width || avail !== this.avail))) {
 			this.r.keepPosition(() => {
 				this.shown = show;
 				this.width = show ? width : 0;
+				this.avail = avail;
 				if (show) {
 					// Center the text and the notes together, so spare room is split between the outer edges.
 					content.style.marginLeft = content.style.marginRight = '';

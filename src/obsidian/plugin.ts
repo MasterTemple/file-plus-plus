@@ -661,7 +661,12 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 				await workspace.revealLeaf(existing);
 				await (existing as WorkspaceLeaf & { loadIfDeferred?: () => Promise<void> }).loadIfDeferred?.();
 				if (existing.view instanceof DocumentView) {
-					if (subpath) existing.view.navigate(subpath);
+					if (subpath) {
+						// Make the place before the jump a history entry, so Back returns to it (private API).
+						const l = existing as WorkspaceLeaf & { recordHistory?: (state: unknown) => void; getHistoryState?: () => unknown };
+						if (existing.view.reader?.isRendered) l.recordHistory?.(l.getHistoryState?.());
+						existing.view.navigate(subpath);
+					}
 				} else await existing.openFile(file, { eState: { subpath: subpath || undefined } });
 				return;
 			}

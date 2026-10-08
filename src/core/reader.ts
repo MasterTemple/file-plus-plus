@@ -288,7 +288,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		const loc = this.rendered ? (this.currentAnchor() ?? this.anchor) : null;
 		this.settings = { ...this.settings, ...patch };
 		this.applySettings();
-		if (loc) this.win.requestAnimationFrame(() => this.scrollToRange(loc, { flash: false, position: 'top' }));
+		if (loc) this.afterFrameUnlessJumped(() => this.scrollToRange(loc, { flash: false, position: 'top' }));
 	}
 
 	private applySettings(): void {
@@ -381,7 +381,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 				keepPosition(fn) {
 					const loc = reader.rendered ? (reader.currentAnchor() ?? reader.anchor) : null;
 					fn();
-					if (loc) reader.win.requestAnimationFrame(() => reader.scrollToRange(loc, { flash: false, position: 'top' }));
+					if (loc) reader.afterFrameUnlessJumped(() => reader.scrollToRange(loc, { flash: false, position: 'top' }));
 				},
 				fallbackTop: (range) => this.sectionOf(range.startContainer)?.wrapper.getBoundingClientRect().top ?? null,
 			});
@@ -427,11 +427,24 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return true;
 	}
 
+	/** Bumped by every jump; deferred scrolls of an older jump (or restore) check it and give way. */
+	private scrollSeq = 0;
+
+	/** Run `fn` on the next frame unless another jump happened meanwhile. */
+	private afterFrameUnlessJumped(fn: () => void): void {
+		const seq = this.scrollSeq;
+		this.win.requestAnimationFrame(() => {
+			if (seq === this.scrollSeq) fn();
+		});
+	}
+
 	scrollToRange(range: Range, opts: { flash?: boolean | FlashOptions; position?: 'top' | 'center' } = {}): void {
 		const position = opts.position ?? 'center';
 		this.anchor = range;
 		this.anchorPosition = position;
+		const seq = ++this.scrollSeq;
 		const doScroll = () => {
+			if (seq !== this.scrollSeq) return;
 			const rect = rangeRect(range);
 			if (!rect) return;
 			const box = this.scroller.getBoundingClientRect();
@@ -653,19 +666,22 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return this.highlightsHidden;
 	}
 
-	private revealed = new Set<string>();
+	private focused = new Set<string>();
 
-	/** While highlights are hidden, still draw these (e.g. the one whose comment is being looked at). */
-	setRevealedHighlights(ids: string[]): void {
+	/**
+	 * Draw attention to some highlights (e.g. the one whose comment is being looked at): the others are
+	 * dimmed, or, while highlights are hidden, only these are drawn. An empty list ends it.
+	 */
+	setFocusedHighlights(ids: string[]): void {
 		const next = new Set(ids);
-		if (next.size === this.revealed.size && ids.every((id) => this.revealed.has(id))) return;
-		this.revealed = next;
-		if (this.highlightsHidden) this.refreshHighlights();
+		if (next.size === this.focused.size && ids.every((id) => this.focused.has(id))) return;
+		this.focused = next;
+		this.refreshHighlights();
 	}
 
 	/** Whether a highlight is drawn (and reacts to the pointer). */
 	private isDrawn(id: string): boolean {
-		return !this.highlightsHidden || this.revealed.has(id);
+		return !this.highlightsHidden || this.focused.has(id);
 	}
 
 	private cachedRange(locator: string): Range | null {
@@ -688,13 +704,17 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 
 	private refreshHighlights(): void {
 		if (!this.rendered || !this.HighlightCtor) return;
-		const groups = new Map<string, { css: string; ranges: Range[] }>();
+		const groups = new Map<string, { css: string; dim: boolean; ranges: Range[] }>();
+		// With some highlights focused (and the rest drawn), the rest are dimmed.
+		const dimming = this.focused.size > 0 && !this.highlightsHidden;
 		for (const h of this.highlights) {
 			if (!h.range) h.range = this.cachedRange(h.spec.locator);
 			if (!h.range || !this.isDrawn(h.spec.id)) continue;
-			const { key, css } = this.colorKey(h.spec.color);
+			const color = this.colorKey(h.spec.color);
+			const dim = dimming && !this.focused.has(h.spec.id);
+			const key = dim ? `dim-${color.key}` : color.key;
 			let g = groups.get(key);
-			if (!g) groups.set(key, (g = { css, ranges: [] }));
+			if (!g) groups.set(key, (g = { css: color.css, dim, ranges: [] }));
 			g.ranges.push(h.range);
 		}
 		for (const name of this.highlightNames) this.registry!.delete(name);
@@ -707,7 +727,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		this.updateHighlightStyles(groups);
 	}
 
-	private updateHighlightStyles(groups?: Map<string, { css: string }>): void {
+	private updateHighlightStyles(groups?: Map<string, { css: string; dim?: boolean }>): void {
 		const pct = Math.round(this.highlightOpacity * 100);
 		const rules = [
 			`::highlight(${this.hlName('search')}) { background-color: rgba(255, 170, 0, 0.35); }`,
@@ -716,7 +736,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			`::highlight(${this.hlName('hover')}) { text-decoration: underline 2px; text-decoration-color: currentColor; }`,
 		];
 		for (const [key, g] of groups ?? []) {
-			rules.push(`::highlight(${this.hlName(key)}) { background-color: color-mix(in srgb, ${g.css} ${pct}%, transparent); }`);
+			rules.push(`::highlight(${this.hlName(key)}) { background-color: color-mix(in srgb, ${g.css} ${g.dim ? Math.round(pct * 0.3) : pct}%, transparent); }`);
 		}
 		this.highlightStyle.textContent = rules.join('\n');
 	}

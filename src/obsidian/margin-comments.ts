@@ -99,15 +99,15 @@ export class MarginComments extends Component {
 	private cardHover: string | null = null;
 
 	/**
-	 * With highlights hidden, the passage of the comment being looked at (hovered or selected) is
-	 * still drawn, so you can see what it is about.
+	 * The highlight of the comment being looked at (hovered or selected) stands out: the others are
+	 * dimmed, or, with highlights hidden, it alone is drawn.
 	 */
 	private syncReveal(): void {
 		const reader = this.view.reader;
 		if (!reader) return;
 		const active = reader.margin.activeId;
 		const ids = [this.cardHover, active?.startsWith('hl:') ? active.slice(3) : null].filter((x): x is string => !!x);
-		reader.setRevealedHighlights(ids);
+		reader.setFocusedHighlights(ids);
 	}
 
 	private applyHover(): void {
@@ -191,13 +191,11 @@ export class MarginComments extends Component {
 			if (!highlightIds.length) return;
 			this.cardHover = highlightIds[0];
 			this.syncReveal();
-			reader()?.setHoveredHighlights(highlightIds);
 		});
 		el.addEventListener('mouseleave', () => {
 			if (!highlightIds.length) return;
 			this.cardHover = null;
 			this.syncReveal();
-			reader()?.setHoveredHighlights([]);
 		});
 		el.addEventListener('click', (ev) => {
 			if ((ev.target as HTMLElement).closest('a')) return;
