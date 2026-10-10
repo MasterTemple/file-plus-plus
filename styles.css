@@ -1132,3 +1132,178 @@ body.fpp-appearance-open .mobile-navbar {
 .fpp-import-errors {
 	color: var(--text-error);
 }
+
+/* ---------- Settings: tabs, each heading's settings in a card (setting-tab.ts, settings-kit.ts) ----------
+   Laid out like Obsidian's own tabs (1.11+: `setting-group`, `setting-items`); these rules add the
+   tabs and what Obsidian has no style for. */
+.fpp-settings {
+	--fpp-settings-gap: var(--size-4-6);
+}
+/* Tabs: a row that stays at the top while the settings scroll, scrolling sideways when narrow */
+.fpp-tabs {
+	position: sticky;
+	top: var(--fpp-tabs-top, calc(-1 * var(--size-4-8)));
+	z-index: 3;
+	display: flex;
+	gap: var(--size-2-2);
+	max-width: var(--setting-group-max-width, none);
+	margin: 0 auto var(--size-4-4);
+	padding: var(--size-4-2) var(--size-2-2);
+	background: var(--settings-background, var(--background-primary));
+	border-bottom: var(--border-width) solid var(--background-modifier-border);
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.fpp-tabs::-webkit-scrollbar {
+	display: none;
+}
+.fpp-tabs .fpp-tab {
+	flex: 1 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--size-2-3);
+	height: auto;
+	padding: var(--size-2-3) var(--size-4-2);
+	border: none;
+	border-radius: var(--radius-m);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	cursor: var(--cursor);
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+.fpp-tabs .fpp-tab:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.fpp-tabs .fpp-tab.is-active {
+	background: color-mix(in srgb, var(--interactive-accent) 16%, transparent);
+	color: var(--text-accent);
+}
+.fpp-tab-icon {
+	display: inline-flex;
+}
+.fpp-tab-icon svg {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+.fpp-tab-panel:not(.is-active) {
+	display: none;
+}
+.fpp-tab-lead {
+	max-width: var(--setting-group-max-width, none);
+	margin: 0 auto var(--size-4-4);
+	padding: 0 var(--size-4-4);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: var(--line-height-normal);
+}
+.fpp-tab-panel .setting-group + .setting-group {
+	margin-top: var(--fpp-settings-gap);
+}
+/* Two cards in one group (the appearance under its device, the colors under the default) */
+.fpp-tab-panel .setting-items + .setting-items {
+	margin-top: var(--size-4-2);
+}
+/* A heading's description, under its name; its button (Add format) beside it */
+.fpp-settings .setting-item-heading .setting-item-description {
+	padding-top: var(--size-2-2);
+	font-weight: var(--font-normal);
+}
+.fpp-settings .setting-item-heading .setting-item-info {
+	flex: 1 1 0;
+	min-width: 0;
+}
+.fpp-settings .setting-item-heading .setting-item-control {
+	flex: 0 0 auto;
+}
+/* Code and names in descriptions */
+.fpp-settings :is(.setting-item-description, .fpp-tab-lead) code {
+	padding: 0.05em 0.25em;
+	border-radius: var(--radius-s);
+	background: var(--code-background);
+	color: var(--code-normal);
+	font-family: var(--font-monospace);
+	font-size: 0.88em;
+	overflow-wrap: anywhere;
+}
+.fpp-settings :is(.setting-item-description, .fpp-tab-lead) em {
+	color: var(--text-normal);
+	font-style: normal;
+	font-weight: var(--font-medium);
+}
+.fpp-settings .fpp-code-input {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+}
+/* A setting that only matters when the one above it is on */
+.fpp-settings .setting-item.fpp-subsetting {
+	padding-top: var(--size-4-3);
+	padding-inline-start: calc(var(--setting-items-padding-x, var(--size-4-4)) + var(--size-4-5));
+}
+.fpp-settings .setting-item.fpp-subsetting .setting-item-name::before {
+	content: '↳ ';
+	color: var(--text-faint);
+}
+/* The menus' items: compact rows, in their card */
+.fpp-settings .fpp-menu-editor {
+	margin: 0;
+}
+.fpp-settings .fpp-menu-editor .setting-item.fpp-menu-editor-row {
+	align-items: center;
+	padding-block: var(--size-4-2);
+}
+/* A copy format: its name, then its template filling the row */
+.fpp-settings .fpp-format-row .setting-item-info {
+	display: none;
+}
+.fpp-settings .fpp-format-row .setting-item-control {
+	flex: 1 1 auto;
+	align-items: flex-start;
+}
+.fpp-settings .fpp-format-row input[type='text'] {
+	flex: 0 0 10em;
+	width: 10em;
+}
+.fpp-settings .fpp-format-row .fpp-template {
+	flex: 1 1 auto;
+	min-width: 0;
+	resize: vertical;
+}
+.fpp-settings .fpp-color-row .setting-item-info {
+	display: none;
+}
+.fpp-settings .fpp-color-row .setting-item-control {
+	flex: 1 1 auto;
+}
+.fpp-settings .fpp-color-row input[type='text'] {
+	flex: 1 1 0;
+	width: auto;
+	min-width: 0;
+}
+.fpp-settings .fpp-color-row input[type='color'] {
+	flex: 0 0 auto;
+	width: var(--input-height);
+	min-width: 0;
+}
+/* Phones: the tabs' names under their icons; a copy format's name over its template */
+.is-phone .fpp-tabs .fpp-tab {
+	flex-direction: column;
+	gap: 2px;
+	padding: var(--size-2-3) var(--size-4-2);
+	font-size: var(--font-ui-smaller);
+}
+.is-phone .fpp-settings .fpp-format-row .setting-item-control {
+	flex-wrap: wrap;
+}
+.is-phone .fpp-settings .fpp-format-row input[type='text'] {
+	flex: 1 1 auto;
+	width: auto;
+}
+.is-phone .fpp-settings .fpp-format-row .fpp-template {
+	flex: 1 1 100%;
+	order: 3;
+}
