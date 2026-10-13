@@ -397,6 +397,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			this.chapterEl.setText(loc.tocItem?.label ?? this.title());
 			this.sidebar.setCurrent(loc.tocItem);
 		});
+		reader.scroller.addEventListener('scroll', () => this.marginComments.scrolled(), { passive: true });
 		reader.on('external-link', (_e, url) => window.open(url, '_blank'));
 		reader.on('highlight-click', (e, specs) => {
 			const entries = specs.map((s) => s.data as HighlightEntry);

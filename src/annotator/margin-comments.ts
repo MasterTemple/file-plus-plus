@@ -82,6 +82,7 @@ export class MarginComments extends Component {
 		this.hovered.clear();
 		this.cardHover = null;
 		this.textHover = [];
+		this.activeShown = true;
 	}
 
 	/** Highlights under the pointer in the text: mark their cards. */
@@ -98,23 +99,47 @@ export class MarginComments extends Component {
 	/** Bring the card of a highlight next to its passage (a highlight was clicked). */
 	activateHighlight(entry: HighlightEntry): void {
 		if (entry.comment && this.visible) this.view.reader?.margin.setActive(`hl:${entry.id}`);
+		this.activeShown = true;
 		this.syncReveal();
 	}
 
 	/** The highlight whose card the pointer is on, if any. */
 	private cardHover: string | null = null;
+	/** Whether the selected card's highlight stands out; scrolling with the pointer off it ends that. */
+	private activeShown = true;
+
+	/** The text scrolled: once the pointer is off the selected comment's highlight, it no longer stands out. */
+	scrolled(): void {
+		const id = this.activeHighlight();
+		if (!this.activeShown || !id || this.cardHover === id || this.textHover.includes(id)) return;
+		this.activeShown = false;
+		this.syncReveal();
+	}
+
+	/** The highlight of the selected card, if any. */
+	private activeHighlight(): string | null {
+		const active = this.view.reader?.margin.activeId;
+		return active?.startsWith('hl:') ? active.slice(3) : null;
+	}
 
 	/**
 	 * The highlight of the comment being looked at (hovered or selected) stands out: the others are
-	 * dimmed, or, with highlights hidden, it alone is drawn.
+	 * dimmed (unless this device turned that off: `dimHighlights`), or, with highlights hidden, it alone is drawn.
 	 */
 	private syncReveal(): void {
 		const reader = this.view.reader;
 		if (!reader) return;
-		const active = reader.margin.activeId;
-		const ids = [this.cardHover, active?.startsWith('hl:') ? active.slice(3) : null].filter((x): x is string => !!x);
-		if (!this.view.plugin.settings.hideHighlights) ids.push(...this.textHover);
+		const { plugin } = this.view;
+		const hidden = plugin.settings.hideHighlights;
+		if (!hidden && !plugin.dimHighlights) return reader.setFocusedHighlights([]);
+		const ids = [this.cardHover, this.activeShown ? this.activeHighlight() : null].filter((x): x is string => !!x);
+		if (!hidden) ids.push(...this.textHover);
 		reader.setFocusedHighlights(ids);
+	}
+
+	/** Settings changed (`dimHighlights`): draw the highlights again. */
+	refreshReveal(): void {
+		this.syncReveal();
 	}
 
 	private applyHover(): void {
@@ -209,6 +234,7 @@ export class MarginComments extends Component {
 			if ((ev.target as HTMLElement).closest('a')) return;
 			const margin = reader()?.margin;
 			if (margin) margin.setActive(margin.activeId === id ? null : id);
+			this.activeShown = true;
 			this.syncReveal();
 		});
 		el.addEventListener('contextmenu', (ev) => {

@@ -359,6 +359,20 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.app.saveLocalStorage(SIDEBAR_KEY, { ...this.sidebarState(), ...change });
 	}
 
+	/**
+	 * Whether a highlight being looked at (hovered, or its comment's) dims the others, kept per device
+	 * in Obsidian's local storage, since repainting every highlight can be slow on some.
+	 */
+	get dimHighlights(): boolean {
+		return this.app.loadLocalStorage(`${this.manifest.id}-dim-highlights`) !== 'off';
+	}
+
+	setDimHighlights(on: boolean): void {
+		// Obsidian removes the key for a falsy value, so off is a string.
+		this.app.saveLocalStorage(`${this.manifest.id}-dim-highlights`, on ? null : 'off');
+		for (const view of this.views()) view.marginComments.refreshReveal();
+	}
+
 	/** This device's id, kept in Obsidian's local storage (per vault and device; not synced). */
 	deviceId = '';
 
