@@ -23,4 +23,5 @@ export {
 } from './reader';
 export * from './settings';
 export { rangeToMarkdown } from './markdown';
+export { sentenceBounds, sentenceRange } from './sentences';
 export { Margin, type MarginNote, type MarginOptions } from './margin';

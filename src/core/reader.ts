@@ -5,6 +5,7 @@ import { searchIndex, type SearchMatch, type SearchOptions } from './search';
 import { TextIndex } from './text-index';
 import { Emitter } from './emitter';
 import { rangeToMarkdown } from './markdown';
+import { sentenceRange } from './sentences';
 import { BASE_CSS, DEFAULT_SETTINGS, settingsToVars, type ReaderSettings } from './settings';
 import { Margin } from './margin';
 
@@ -764,6 +765,46 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		((this.shadow as any).getSelection?.() ?? this.doc.getSelection())?.removeAllRanges();
 	}
 
+	/** Selects `range` (in the document) */
+	select(range: Range): void {
+		const sel: Selection | null = (this.shadow as any).getSelection?.() ?? this.doc.getSelection();
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+	}
+
+	/**
+	 * What the `count`th click in a row at (x, y) selects, from the third on (null: the browser's
+	 * own): the sentence, then its paragraph. Formats with other units (verses) override it.
+	 */
+	protected multiClickRange(count: number, x: number, y: number, target: Element): Range | null {
+		const block = target.closest(BLOCKS);
+		if (!block || block === this.content || !this.content.contains(block)) return null;
+		if (count === 3) {
+			const at = this.caretAt(x, y);
+			if (at && block.contains(at[0])) {
+				const lang = block.closest('[lang], [xml\\:lang]');
+				return sentenceRange(block, at[0], at[1], lang?.getAttribute('lang') ?? lang?.getAttribute('xml:lang') ?? undefined);
+			}
+		}
+		const range = this.doc.createRange();
+		range.selectNodeContents(block);
+		return range;
+	}
+
+	/** The text position at (x, y) in the document */
+	protected caretAt(x: number, y: number): [Node, number] | null {
+		const d = this.doc as Document & { caretPositionFromPoint?(x: number, y: number, opts?: { shadowRoots: ShadowRoot[] }): CaretPosition | null };
+		try {
+			const pos = d.caretPositionFromPoint?.(x, y, { shadowRoots: [this.shadow] });
+			if (pos && this.content.contains(pos.offsetNode)) return [pos.offsetNode, pos.offset];
+		} catch {
+			/* no shadowRoots option */
+		}
+		// The word a double click just selected there
+		const sel = this.getSelectionRange();
+		return sel && rectsContain(sel, x, y) ? [sel.startContainer, sel.startOffset] : null;
+	}
+
 	// ---------------------------------------------------------------------------------------------
 	// Highlights
 	// ---------------------------------------------------------------------------------------------
@@ -1239,6 +1280,25 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			const annotations = this.layerHitsAt(e.clientX, e.clientY);
 			if (annotations.length) this.emit('annotation-click', e, annotations);
 		});
+
+		// A triple click selects the sentence, a fourth the paragraph. Counted here: Chromium on Linux
+		// starts `detail` again at 1 after a triple click. Taps (their synthetic mousedowns) don't count.
+		let clicks = { count: 0, at: 0, x: 0, y: 0 };
+		let touchedAt = 0;
+		on(this.scroller, 'touchstart', () => (touchedAt = Date.now()), { capture: true, passive: true });
+		on(this.scroller, 'mousedown', (e) => {
+			if (e.button !== 0 || Date.now() - touchedAt < 800) return;
+			const now = Date.now();
+			const again = e.detail > 1 || (now - clicks.at < 600 && Math.hypot(e.clientX - clicks.x, e.clientY - clicks.y) < 8);
+			clicks = { count: again ? Math.max(clicks.count + 1, e.detail) : 1, at: now, x: e.clientX, y: e.clientY };
+			if (clicks.count < 3) return;
+			const el = e.composedPath()[0];
+			if (!(el instanceof Element) || !this.content.contains(el)) return;
+			const range = this.multiClickRange(clicks.count, e.clientX, e.clientY, el);
+			if (!range) return;
+			e.preventDefault();
+			this.select(range);
+		}, { capture: true });
 
 		on(this.scroller, 'contextmenu', (e) => {
 			const range = this.getSelectionRange();

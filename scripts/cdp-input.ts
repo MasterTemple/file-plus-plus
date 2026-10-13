@@ -1,6 +1,6 @@
 /**
  * Send real mouse input through CDP (Input.dispatchMouseEvent), then print an expression's value.
- *   bun scripts/cdp-input.ts --port 9333 --click x,y[,mods] | --dblclick x,y | --drag x1,y1,x2,y2 [--eval "js"]
+ *   bun scripts/cdp-input.ts --port 9333 --click x,y[,mods] | --dblclick x,y | --clicks x,y,n | --drag x1,y1,x2,y2 [--eval "js"]
  */
 const args = process.argv.slice(2);
 const opt = (k: string) => {
@@ -39,6 +39,14 @@ if (dbl) {
 	await mouse('mouseReleased', x, y, 1);
 	await mouse('mousePressed', x, y, 2);
 	await mouse('mouseReleased', x, y, 2);
+}
+const clicks = opt('--clicks'); // x,y,n: n clicks in a row (triple, quadruple…)
+if (clicks) {
+	const [x, y, n] = clicks.split(',').map(Number);
+	for (let i = 1; i <= n; i++) {
+		await mouse('mousePressed', x, y, i);
+		await mouse('mouseReleased', x, y, i);
+	}
 }
 const drag = opt('--drag');
 if (drag) {
