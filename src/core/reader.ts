@@ -915,6 +915,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			`::highlight(${this.hlName('search-current')}) { background-color: rgba(255, 120, 0, 0.8); color: black; }`,
 			`::highlight(${this.hlName('pending')}) { background-color: var(--text-selection, Highlight); }`,
 			`::highlight(${this.hlName('hover')}) { text-decoration: underline 2px; text-decoration-color: currentColor; }`,
+			`::highlight(${this.hlName('playing')}) { background-color: color-mix(in srgb, var(--interactive-accent, #7c5cff) 22%, transparent); }`,
 		];
 		for (const g of this.paintGroups) {
 			const level = g.from + (g.to - g.from) * p;
@@ -932,6 +933,19 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		if (range && this.HighlightCtor) {
 			const h = new this.HighlightCtor(range);
 			h.priority = 20;
+			this.registry!.set(name, h);
+		} else this.registry?.delete(name);
+	}
+
+	/**
+	 * Mark what a media player is reading (a cue, a verse), under the document's highlights; null
+	 * clears it. Formats whose units are elements may mark them themselves instead.
+	 */
+	setPlayingRange(range: AbstractRange | null): void {
+		const name = this.hlName('playing');
+		if (range && this.HighlightCtor) {
+			const h = new this.HighlightCtor(range);
+			h.priority = -2;
 			this.registry!.set(name, h);
 		} else this.registry?.delete(name);
 	}

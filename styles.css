@@ -1133,6 +1133,160 @@ body.fpp-appearance-open .mobile-navbar {
 	color: var(--text-error);
 }
 
+/* ---------- Media player (Transcript++, the Topos Bible plugin; see obsidian/player.ts) ---------- */
+.fpp-player-ui {
+	container-type: inline-size;
+}
+.fpp-media {
+	display: block;
+	width: 100%;
+	max-height: 40vh;
+	background: black;
+	cursor: pointer;
+}
+.fpp-player-ui.is-audio .fpp-media,
+.fpp-player-ui.is-audio .fpp-fullscreen {
+	display: none;
+}
+.is-phone .fpp-media {
+	max-height: 28vh;
+}
+
+/* Wide: one row. [−10] [▶] [+10] 0:12 ━━━●━━━ 0:43 [MP4] [1×] [⛶] */
+.fpp-controls {
+	display: grid;
+	grid-template-columns: auto auto auto auto 1fr auto auto auto auto;
+	grid-template-areas: 'back play forward current seek total source rate fullscreen';
+	align-items: center;
+	gap: var(--size-4-1) var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+}
+.fpp-back { grid-area: back; }
+.fpp-player-ui .fpp-play { grid-area: play; }
+.fpp-forward { grid-area: forward; }
+.fpp-player-ui .fpp-time-current { grid-area: current; }
+.fpp-player-ui .fpp-seek { grid-area: seek; }
+.fpp-player-ui .fpp-time-total { grid-area: total; }
+.fpp-player-ui .fpp-rate { grid-area: rate; }
+.fpp-player-ui .fpp-source { grid-area: source; justify-self: start; }
+.fpp-fullscreen { grid-area: fullscreen; }
+
+/* Narrow (phones, small panes, embeds): the bar on its own row, big buttons below. */
+@container (max-width: 520px) {
+	.fpp-controls {
+		grid-template-columns: auto 1fr auto auto auto 1fr auto;
+		grid-template-areas:
+			'current seek seek seek seek seek total'
+			'rate source back play forward . fullscreen';
+		row-gap: var(--size-4-2);
+		padding: var(--size-4-2) var(--size-4-3) var(--size-4-3);
+	}
+	.fpp-player-ui.is-audio .fpp-controls {
+		grid-template-areas:
+			'current seek seek seek seek seek total'
+			'rate source back play forward . .';
+	}
+}
+
+.fpp-player-ui .fpp-control {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 40px;
+	height: 40px;
+	padding: 0 var(--size-4-2);
+	border-radius: var(--radius-m);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-variant-numeric: tabular-nums;
+	cursor: pointer;
+}
+.fpp-player-ui .fpp-control:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.fpp-player-ui .fpp-control svg {
+	width: 20px;
+	height: 20px;
+}
+.fpp-player-ui .fpp-play {
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+.fpp-player-ui .fpp-play:hover {
+	background: var(--interactive-accent-hover);
+	color: var(--text-on-accent);
+}
+.fpp-player-ui .fpp-play svg {
+	width: 22px;
+	height: 22px;
+}
+.fpp-player-ui .fpp-rate {
+	min-width: 48px;
+}
+.fpp-player-ui .fpp-time {
+	font-size: var(--font-ui-small);
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+/* The progress bar: a tall touch area, a visible track, a big thumb. */
+.fpp-player-ui .fpp-seek {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 100%;
+	min-width: 60px;
+	height: 28px;
+	margin: 0;
+	background: transparent;
+	cursor: pointer;
+	touch-action: none;
+}
+.fpp-player-ui .fpp-seek::-webkit-slider-runnable-track {
+	height: 6px;
+	border-radius: 3px;
+	background: linear-gradient(to right, var(--interactive-accent) var(--progress, 0%), var(--background-modifier-border) var(--progress, 0%));
+}
+.fpp-player-ui .fpp-seek::-moz-range-track {
+	height: 6px;
+	border-radius: 3px;
+	background: linear-gradient(to right, var(--interactive-accent) var(--progress, 0%), var(--background-modifier-border) var(--progress, 0%));
+}
+.fpp-player-ui .fpp-seek::-webkit-slider-thumb,
+.fpp-player-ui .fpp-seek:not(:disabled)::-webkit-slider-thumb:active {
+	-webkit-appearance: none;
+	/* Obsidian offsets its slider thumbs with position/top; centre ours on the 6px track instead. */
+	position: static;
+	top: auto;
+	width: 18px;
+	height: 18px;
+	margin-top: -6px;
+	opacity: 1;
+	border: none;
+	border-radius: 50%;
+	background: var(--interactive-accent);
+	box-shadow: 0 0 0 3px var(--background-secondary);
+}
+.fpp-player-ui .fpp-seek::-moz-range-thumb {
+	width: 18px;
+	height: 18px;
+	border: none;
+	border-radius: 50%;
+	background: var(--interactive-accent);
+}
+.is-mobile .fpp-player-ui .fpp-seek::-webkit-slider-thumb,
+.is-mobile .fpp-player-ui .fpp-seek:not(:disabled)::-webkit-slider-thumb:active {
+	width: 22px;
+	height: 22px;
+	margin-top: -8px;
+}
+
 /* ---------- Settings: tabs, each heading's settings in a card (setting-tab.ts, settings-kit.ts) ----------
    Laid out like Obsidian's own tabs (1.11+: `setting-group`, `setting-items`); these rules add the
    tabs and what Obsidian has no style for. */
