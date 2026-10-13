@@ -103,7 +103,8 @@ export class Sidebar {
 		provider?.render();
 		if (id !== 'search') this.view.reader?.showSearchResults([]);
 		else {
-			if (this.results.length) this.view.reader?.showSearchResults(this.results, -1);
+			if (this.searchInput && this.searchInput.value !== this.lastQuery) this.runSearch();
+			else if (this.results.length) this.view.reader?.showSearchResults(this.results, -1);
 			this.warmIndex();
 		}
 	}
@@ -117,9 +118,12 @@ export class Sidebar {
 		this.searchInfo?.setText('');
 		// Providers re-add their tabs for the next document.
 		for (const id of [...this.providerPanels.keys()]) this.removeProvider(id.replace(/^provider:/, ''));
+		// The query stays: the next document (or this one, drawn again) is searched for it
+		this.lastQuery = '';
 		if (!toc) return;
 		if (!toc.length) this.tocEl.createDiv({ cls: 'fpp-empty', text: `This ${this.noun} has no table of contents.` });
 		this.renderToc(toc, this.tocEl);
+		if (this.activeTab === 'search' && this.searchInput?.value.trim()) this.runSearch();
 	}
 
 	// --- TOC -------------------------------------------------------------------------------------
@@ -205,10 +209,16 @@ export class Sidebar {
 			if (q !== this.lastQuery && (q.trim().length >= 2 || !q.trim())) this.runSearch();
 		}, Platform.isMobile ? 450 : 250, true);
 		this.searchInput.addEventListener('input', run);
+		// A pasted query is searched for at once, even one that's already there
+		this.searchInput.addEventListener('paste', () => {
+			window.setTimeout(() => {
+				if (this.searchInput.value.trim()) this.runSearch();
+			});
+		});
 		this.searchInput.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter') {
 				e.preventDefault();
-				if (this.searchInput.value !== this.lastQuery) this.runSearch();
+				if (this.searchInput && this.searchInput.value !== this.lastQuery) this.runSearch();
 				this.step(e.shiftKey ? -1 : 1);
 			} else if (e.key === 'Escape') {
 				this.searchInput.value = '';
@@ -230,10 +240,8 @@ export class Sidebar {
 	}
 
 	focusSearch(query?: string): void {
-		if (query) {
-			this.searchInput.value = query;
-			this.runSearch();
-		}
+		if (query) this.searchInput.value = query;
+		if (query || this.searchInput.value !== this.lastQuery) this.runSearch();
 		this.searchInput.focus();
 		this.searchInput.select();
 	}
