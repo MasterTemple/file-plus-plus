@@ -27,6 +27,8 @@ export class Sidebar {
 	private body: HTMLElement;
 	private activeTab: Tab = 'toc';
 	private providerPanels = new Map<string, ProviderPanel>();
+	/** What a format's own tabs (`addFormatTab`) do each time they're shown */
+	private formatTabs = new Map<Tab, () => void>();
 
 	constructor(
 		private view: DocumentView,
@@ -68,6 +70,26 @@ export class Sidebar {
 		return panel;
 	}
 
+	/**
+	 * A tab of the format's own (the Bible's commentaries), after the built-in ones: its panel, which
+	 * stays across documents; `onShow` runs each time the tab is shown
+	 */
+	addFormatTab(id: Tab, icon: string, label: string, onShow: () => void = () => {}): HTMLElement {
+		const panel = this.addTab(id, icon, label);
+		this.formatTabs.set(id, onShow);
+		return panel;
+	}
+
+	/** The sidebar opened: a format's tab showing is told so (`onShow`) */
+	opened(): void {
+		this.formatTabs.get(this.activeTab)?.();
+	}
+
+	/** Whether a tab is the one showing (in the sidebar, open or not) */
+	isActive(id: Tab): boolean {
+		return this.activeTab === id;
+	}
+
 	/** Add or update the tab of an annotation provider for the current document. */
 	setProvider(provider: AnnotationProvider<unknown>, hidden: boolean): void {
 		const id = layerId(provider.id);
@@ -98,6 +120,7 @@ export class Sidebar {
 			t.button.toggleClass('is-active', k === id);
 			t.panel.toggleClass('is-active', k === id);
 		}
+		this.formatTabs.get(id)?.();
 		const provider = this.providerPanels.get(id);
 		this.view.setSearchNavVisible((id === 'search' && this.results.length > 0) || (!!provider && provider.count > 0));
 		provider?.render();

@@ -1205,9 +1205,27 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		const isOpen = this.mainEl.hasClass('fpp-sidebar-open');
 		const next = open ?? !isOpen;
 		this.mainEl.toggleClass('fpp-sidebar-open', next);
+		if (next && !isOpen) this.sidebar?.opened();
 		// Obsidian's mobile navbar overlaps the drawer's bottom; hide it while the drawer is open.
 		this.contentEl.doc.body.toggleClass('fpp-drawer-open', next && this.sidebarIsOverlay());
 		if (persist) this.plugin.rememberSidebar({ open: next });
+	}
+
+	/** Adds a tab of the format's own to the sidebar (see `Sidebar.addFormatTab`); call it in `buildExtraUi` */
+	addSidebarTab(id: string, icon: string, label: string, onShow?: () => void): HTMLElement {
+		return this.sidebar.addFormatTab(id, icon, label, onShow);
+	}
+
+	/** Opens the sidebar at a tab (as if picked: new views open on it too) */
+	showSidebarTab(id: string): void {
+		this.toggleSidebar(true, false);
+		this.sidebar.showTab(id);
+		this.plugin.rememberSidebar({ tab: id });
+	}
+
+	/** Whether a tab of the sidebar shows: the sidebar open, at that tab */
+	sidebarTabShown(id: string): boolean {
+		return this.mainEl.hasClass('fpp-sidebar-open') && this.sidebar.isActive(id);
 	}
 
 	openSearch(): void {
