@@ -83,4 +83,9 @@ export interface FileFormat<Doc = unknown, R extends DocumentReader = DocumentRe
 	 * file is for), or null
 	 */
 	locatorOfText?(markdown: string, target: TFile | null): string | null;
+	/**
+	 * What a highlight is called on its comment card in the margin (default: the note it's in): its
+	 * passage (`John 3:16`), when its note is shared and says less
+	 */
+	highlightLabel?(locator: string, target: TFile | null): string | null;
 }

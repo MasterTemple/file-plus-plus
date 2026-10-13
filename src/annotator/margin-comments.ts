@@ -150,7 +150,8 @@ export class MarginComments extends Component {
 		const noteName = e.sourcePath.split('/').pop()!.replace(/\.md$/, '');
 		const meta = !inAnnotationFile || e.updated ? el.createDiv('fpp-mc-meta') : null;
 		if (meta && !inAnnotationFile) {
-			const note = meta.createEl('a', { cls: 'fpp-mc-source', text: noteName });
+			const label = view.plugin.format.highlightLabel?.(e.locator, view.file) ?? noteName;
+			const note = meta.createEl('a', { cls: 'fpp-mc-source', text: label });
 			note.setAttr('aria-label', e.heading ? `${e.sourcePath} › ${e.heading}` : e.sourcePath);
 			note.addEventListener('click', (ev) => {
 				ev.stopPropagation();
