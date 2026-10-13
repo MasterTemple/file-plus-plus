@@ -471,6 +471,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 				// Touch browsers fire contextmenu on long-press and when tapping a selection; that's what opens
 				// the OS selection toolbar. After "System menu", leave it alone so the OS menu can open.
 				if (this.nativeSelectionMode) return;
+				// A long press the view handled (`onTextHold`): no OS menu or selection menu
+				if (Date.now() - this.lastHold < 1000) {
+					e.preventDefault();
+					return;
+				}
 				if (highlights.length || annotations.length) {
 					// Long-press on a highlight (Android fires contextmenu; the hold timer may have run already).
 					e.preventDefault();
@@ -792,16 +797,27 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	private lastHold = 0;
 	private holdTimer = 0;
 
+	/**
+	 * A long press on text that isn't a highlight or an annotation (mobile): return true to handle it
+	 * (a word's dictionary entry), and the OS's selection of the word and the selection menu are kept
+	 * away; false leaves the OS to select the word. `target`: the element under the finger
+	 */
+	protected onTextHold(_x: number, _y: number, _target: Element | null): boolean {
+		return false;
+	}
+
 	/** A long press: when it is on a highlight, run the configured action and keep the OS selection away. */
 	private onHold(x: number, y: number): void {
 		const hits = this.reader?.highlightsAt(x, y) ?? [];
 		const annotations = hits.length ? [] : (this.reader?.layerHitsAt(x, y) ?? []);
-		if (!hits.length && !annotations.length) return;
+		const text = !hits.length && !annotations.length;
+		if (text && !this.onTextHold(x, y, this.reader?.shadow.elementFromPoint(x, y) ?? null)) return;
 		this.lastHold = Date.now();
 		window.clearTimeout(this.selectionMenuTimer);
 		const doc = this.contentEl.doc;
 		// The OS starts selecting the word under a long press; drop that selection.
 		for (const ms of [0, 120, 400]) window.setTimeout(() => doc.getSelection()?.removeAllRanges(), ms);
+		if (text) return;
 		if (annotations.length) return this.showAnnotationMenu(annotations, { x, y });
 		this.runHighlightGesture(this.plugin.settings.highlightHold, hits.map((h) => h.data as HighlightEntry), { x, y });
 	}
@@ -1143,6 +1159,16 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			this.lastMenuLocator = cur.locator;
 			this.showSelectionMenu(cur);
 		}, 500);
+	}
+
+	/** Opens the selection menu (Copy / Insert / Both, the formats) on a range, as if it were selected: a verse, a word */
+	openSelectionMenu(range: Range): void {
+		const info = this.reader?.describeRange(range);
+		if (!info) return;
+		this.nativeSelectionMode = false;
+		this.lastMenuLocator = info.locator;
+		window.clearTimeout(this.selectionMenuTimer);
+		this.showSelectionMenu(info);
 	}
 
 	/** @internal (the annotator) */
