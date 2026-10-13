@@ -1249,7 +1249,10 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		});
 
 		let hoverRaf = 0;
+		/** The pointer's last move over the text, to check again what is under it after scrolling. */
+		let pointer: MouseEvent | null = null;
 		on(this.scroller, 'mouseleave', (e) => {
+			pointer = null;
 			this.win.clearTimeout(this.hoverLeaveTimer);
 			if (this.lastHover) {
 				this.lastHover = '';
@@ -1260,7 +1263,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 				this.emit('annotation-hover', e, []);
 			}
 		});
-		on(this.scroller, 'mousemove', (e) => {
+		const checkHover = (e: MouseEvent) => {
 			if (hoverRaf || (!this.highlights.length && !this.layers.size)) return;
 			hoverRaf = this.win.requestAnimationFrame(() => {
 				hoverRaf = 0;
@@ -1285,9 +1288,15 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 					this.emit('annotation-hover', e, annotations);
 				}
 			});
+		};
+		on(this.scroller, 'mousemove', (e) => {
+			pointer = e;
+			checkHover(e);
 		});
 
 		on(this.scroller, 'scroll', () => {
+			// The text moved under a still pointer: what it is over may have changed.
+			if (pointer) checkHover(pointer);
 			this.win.clearTimeout(this.relocateTimer);
 			this.relocateTimer = this.win.setTimeout(() => {
 				// Skip while hidden, detached, or after moving to another window (the owner rebuilds us then).
