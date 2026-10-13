@@ -2,6 +2,7 @@ import { formatLocator, type DocumentReader, type ReaderSettings } from '../core
 import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, parseLinktext, type PaneType, type ViewState, type Workspace, type OpenViewState } from 'obsidian';
 import { around } from './patch';
 import { shareHotkeys } from './hotkeys';
+import { hoverLink } from './hover';
 import { resolveFile } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
 import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type OpenTarget } from './settings';
@@ -195,7 +196,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	private registerEditorHover(): void {
 		this.registerDomEvent(document, 'mouseover', (e) => {
 			if (!this.settings.previews || e.ctrlKey || e.metaKey) return; // with a modifier Obsidian handles it
-			const el = (e.target as HTMLElement | null)?.closest?.('.cm-hmd-internal-link, .cm-link, .cm-url, .cm-underline');
+			const el = (e.target as HTMLElement | null)?.closest?.<HTMLElement>('.cm-hmd-internal-link, .cm-link, .cm-url, .cm-underline');
 			if (!el || !el.closest('.markdown-source-view')) return;
 			let view: MarkdownView | null = null;
 			this.app.workspace.iterateAllLeaves((l) => {
@@ -215,7 +216,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 			if (!linktext) return;
 			const { path } = parseLinktext(linktext);
 			if (!this.resolveLink(path, mdView.file.path)) return;
-			this.app.workspace.trigger('hover-link', {
+			hoverLink(this.app, {
 				event: e,
 				source: this.editorHoverSource,
 				hoverParent: mdView,

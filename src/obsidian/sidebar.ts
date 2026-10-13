@@ -3,6 +3,7 @@ import { Component, MarkdownRenderer, Menu, Platform, debounce, setIcon, type Ho
 import type { HighlightEntry } from '../annotator/highlight-index';
 import { layerId, type Annotation, type AnnotationProvider } from './api';
 import { titleCase } from './settings';
+import { hoverLink } from './hover';
 import type { DocumentView } from './view';
 import { timeAgo } from '../annotator/margin-comments';
 
@@ -488,38 +489,26 @@ export class Sidebar {
 
 /**
  * Puts the hover preview of a row in the list beside the list, not below the row, where it would
- * cover the rows under it. Obsidian's page preview makes the popover a little later (its `staticPos`,
- * which isn't in the API's types, is where it goes, also when it moves it again as its content loads)
+ * cover the rows under it (`hoverLink` keeps it there as Obsidian places it again)
  */
-function placeBeside(parent: HoverParent, before: HoverPopover | null, row: HTMLElement): void {
+function placeBeside(popover: HoverPopover, row: HTMLElement): void {
 	const win = row.win;
-	let frames = 0;
-	const look = () => {
-		const popover = parent.hoverPopover as (HoverPopover & { targetEl?: HTMLElement; staticPos?: { x: number; y: number } | null }) | null;
-		if (!popover || popover === before || popover.targetEl !== row) {
-			if (++frames < 60) win.requestAnimationFrame(look);
-			return;
-		}
-		const list = row.closest('.fpp-search-results') ?? row;
-		const r = list.getBoundingClientRect();
-		const top = row.getBoundingClientRect().top;
-		const gap = 8;
-		// The side with more room (the list is usually at the left of the text)
-		const right = win.innerWidth - r.right >= r.left;
-		const place = () => {
-			const width = popover.hoverEl.offsetWidth;
-			const x = right ? r.right + gap : Math.max(gap, r.left - gap - width);
-			popover.staticPos = { x, y: top };
-			if (popover.hoverEl.isConnected) {
-				popover.hoverEl.style.left = `${x}px`;
-				popover.hoverEl.style.top = `${Math.max(gap, Math.min(top, win.innerHeight - popover.hoverEl.offsetHeight - gap))}px`;
-			}
-		};
-		place();
-		// Its width is known once it shows
-		if (!right) win.requestAnimationFrame(place);
+	const list = row.closest('.fpp-search-results') ?? row;
+	const r = list.getBoundingClientRect();
+	const top = row.getBoundingClientRect().top;
+	const gap = 8;
+	// The side with more room (the list is usually at the left of the text)
+	const right = win.innerWidth - r.right >= r.left;
+	const place = () => {
+		if (!popover.hoverEl.isConnected) return;
+		const width = popover.hoverEl.offsetWidth;
+		const x = right ? r.right + gap : Math.max(gap, r.left - gap - width);
+		popover.hoverEl.style.left = `${x}px`;
+		popover.hoverEl.style.top = `${Math.max(gap, Math.min(top, win.innerHeight - popover.hoverEl.offsetHeight - gap))}px`;
 	};
-	win.requestAnimationFrame(look);
+	place();
+	// Its width is known once it shows
+	if (!right) win.requestAnimationFrame(place);
 }
 
 /** How much of the text around an annotation its row shows, on each side */
@@ -756,17 +745,15 @@ class ProviderPanel {
 		const layer = layerId(this.provider.id);
 		const link = this.provider.preview?.(item.annotation, this.view.annotationContext(layer, item.annotation));
 		if (!link) return;
-		const parent = this.view as unknown as HoverParent;
-		const before = parent.hoverPopover;
-		this.view.app.workspace.trigger('hover-link', {
+		hoverLink(this.view.app, {
 			event: e,
 			source: this.view.plugin.annotationHoverSource,
-			hoverParent: this.view,
+			hoverParent: this.view as unknown as HoverParent,
 			targetEl: row,
 			linktext: link,
 			sourcePath: this.view.file?.path ?? '',
+			place: (popover) => placeBeside(popover, row),
 		});
-		placeBeside(parent, before, row);
 	}
 
 	step(delta: number): void {

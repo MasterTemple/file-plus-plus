@@ -1,5 +1,5 @@
 import { type DocumentReader, type HighlightSpec, type LayerHit, type SelectionInfo, type TocItem } from '../core';
-import { FileView, Menu, Notice, Platform, Scope, TFile, setIcon, type MenuItem, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
+import { FileView, Menu, Notice, Platform, Scope, TFile, setIcon, type HoverParent, type MenuItem, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import type { HighlightEntry } from '../annotator/highlight-index';
 import { SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, type AnnotationMode, type HighlightGestureAction } from './settings';
 import type { CopyTarget, FilePlusPlusPlugin } from './plugin';
@@ -10,6 +10,7 @@ import { ViewAnnotator } from '../annotator/view-annotator';
 import { AnnotationTip } from './annotation-tip';
 import { MarginComments, type ProviderNotes } from '../annotator/margin-comments';
 import { layerId, type Annotation, type AnnotationContext, type AnnotationProvider } from './api';
+import { hoverLink } from './hover';
 
 /** Annotations under the pointer, grouped by their provider. */
 interface AnnotationGroup {
@@ -433,13 +434,15 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 				this.annotationTip.hide();
 				if (key === this.lastPreview) return;
 				this.lastPreview = key;
-				this.app.workspace.trigger('hover-link', {
+				const keyAt = (x: number, y: number) => (this.reader?.layerHitsAt(x, y) ?? []).map((h) => `${h.layer}:${h.spec.id}`).join('|');
+				hoverLink(this.app, {
 					event: e,
 					source: this.plugin.annotationHoverSource,
-					hoverParent: this,
+					hoverParent: this as unknown as HoverParent,
 					targetEl: this.hostEl,
 					linktext: preview,
 					sourcePath: this.file?.path ?? '',
+					over: (x, y) => keyAt(x, y) === key,
 				});
 				return;
 			}
