@@ -9,6 +9,8 @@ export interface BookImportResult {
 	annotationFile: TFile | null;
 	/** The annotation file was created by this import. */
 	created: boolean;
+	/** Highlights the import had for this document. */
+	total: number;
 	added: number;
 	duplicates: number;
 	/** Of a kind (with / without comment) that was turned off. */
@@ -24,6 +26,20 @@ export interface ImportSummary {
 	books: BookImportResult[];
 	/** Books named in the JSON that aren't in the vault, with how many highlights they had. */
 	missing: { name: string; count: number }[];
+}
+
+/** Books left out before the import (e.g. not matched to a file by an importer), listed in its summary. */
+export interface NotImported {
+	name: string;
+	count: number;
+	/** Why, e.g. "Skipped" or "Not matched to a file". */
+	reason: string;
+	/** Left out on purpose (shown as skipped, not as missed). */
+	skipped?: boolean;
+}
+
+export interface ImportModalOptions {
+	notImported?: NotImported[];
 }
 
 /** The format's files the JSON's book names refer to (by path, file name, or name without extension). */
@@ -77,7 +93,7 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 	let n = 0;
 	for (const [file, entries] of byFile) {
 		onProgress?.(`${file.basename} (${++n} of ${byFile.size})…`);
-		const result: BookImportResult = { file, annotationFile: null, created: false, added: 0, duplicates: 0, skipped: 0, foundByText: 0, notFound: [] };
+		const result: BookImportResult = { file, annotationFile: null, created: false, total: entries.length, added: 0, duplicates: 0, skipped: 0, foundByText: 0, notFound: [] };
 		books.push(result);
 		try {
 			const view = await viewFor(plugin, file);
@@ -154,6 +170,7 @@ export class ImportModal extends Modal {
 		app: App,
 		private plugin: FilePlusPlusPlugin,
 		initial = '',
+		private options: ImportModalOptions = {},
 	) {
 		super(app);
 		this.json = initial;
@@ -269,32 +286,93 @@ export class ImportModal extends Modal {
 
 	private renderSummary({ books, missing }: ImportSummary): void {
 		const { contentEl, plugin } = this;
-		const total = books.reduce((n, b) => n + b.added, 0);
-		this.titleEl.setText(`Imported ${total} highlight${total === 1 ? '' : 's'}`);
-		const list = contentEl.createEl('ul', { cls: 'fpp-import-summary' });
+		const noun = plugin.format.noun;
+		const sum = (f: (b: BookImportResult) => number) => books.reduce((n, b) => n + f(b), 0);
+		const added = sum((b) => b.added);
+		const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+		this.titleEl.setText(`Imported ${plural(added, 'highlight')}`);
+		const notImported = this.options.notImported ?? [];
+		const outside: NotImported[] = [...missing.map((m) => ({ ...m, reason: 'Not in the vault' })), ...notImported];
+
+		const totals = { total: sum((b) => b.total), added, duplicates: sum((b) => b.duplicates), skipped: sum((b) => b.skipped), notFound: sum((b) => b.notFound.length) };
+		const left = outside.reduce((n, o) => n + o.count, 0);
+		const parts = [added ? `${plural(added, 'highlight')} added to ${plural(books.filter((b) => b.added).length, noun)}` : 'Nothing new added'];
+		if (totals.duplicates) parts.push(`${totals.duplicates} already there`);
+		if (totals.skipped) parts.push(`${totals.skipped} of a kind turned off`);
+		if (totals.notFound) parts.push(`${totals.notFound} not found`);
+		if (left) parts.push(`${left} in ${plural(outside.length, noun)} not imported`);
+		contentEl.createDiv({ cls: 'fpp-import-info', text: `${parts.join(' · ')}.` });
+
+		const wrap = contentEl.createDiv('fpp-import-table-wrap');
+		const table = wrap.createEl('table', { cls: 'fpp-import-table' });
+		const head = table.createEl('thead').createEl('tr');
+		const columns: [string, string][] = [
+			[titleCase(noun), ''],
+			['In import', 'Highlights the import had for it'],
+			['Added', 'Inserted into its annotation file'],
+			['Already there', 'The same passage and comment were already in your notes (or repeated in the import)'],
+			['Turned off', 'Of a kind (with / without comment) that is turned off'],
+			['Not found', `The passage isn't in the ${noun}`],
+		];
+		for (const [name, tip] of columns) head.createEl('th', { text: name, attr: tip ? { 'aria-label': tip } : {} });
+		const body = table.createEl('tbody');
+		const cell = (tr: HTMLElement, n: number, cls: string) => tr.createEl('td', { cls: n ? cls : 'is-zero', text: n ? String(n) : '–' });
 		for (const b of books) {
-			const li = list.createEl('li');
-			li.createEl('strong', { text: b.file.basename });
-			const parts = [`${b.added} added`];
-			if (b.duplicates) parts.push(`${b.duplicates} already there`);
-			if (b.skipped) parts.push(`${b.skipped} of a kind turned off`);
-			if (b.notFound.length) parts.push(`${b.notFound.length} not found in the ${plugin.format.noun}`);
-			if (b.foundByText) parts.push(`${b.foundByText} located by their text`);
-			li.appendText(`: ${parts.join(', ')}`);
+			const tr = body.createEl('tr');
+			if (b.error) tr.addClass('is-error');
+			else if (b.notFound.length || b.skipped) tr.addClass('is-warning');
+			const name = tr.createEl('td', { cls: 'fpp-import-book' });
+			name.createDiv({ cls: 'fpp-import-book-name', text: b.file.basename });
+			const sub = name.createDiv('fpp-import-book-note');
 			if (b.annotationFile) {
-				li.appendText(b.created ? ' — created ' : ' — in ');
-				const a = li.createEl('a', { text: b.annotationFile.basename, href: '#' });
+				sub.appendText(b.created ? 'Created ' : 'In ');
+				const a = sub.createEl('a', { text: b.annotationFile.basename, href: '#' });
 				a.addEventListener('click', (e) => {
 					e.preventDefault();
 					this.close();
 					void plugin.annotator.openNote(b.annotationFile!);
 				});
+			} else if (!b.error) sub.appendText(b.total === b.duplicates ? 'Nothing new' : 'Nothing added');
+			if (b.foundByText) sub.appendText(`${sub.childNodes.length ? ' · ' : ''}${b.foundByText} located by their text`);
+			if (b.error) name.createDiv({ cls: 'fpp-import-errors', text: `Failed: ${b.error}` });
+			cell(tr, b.total, '');
+			cell(tr, b.added, 'is-added');
+			cell(tr, b.duplicates, 'is-duplicate');
+			cell(tr, b.skipped, 'is-skipped');
+			const nf = cell(tr, b.notFound.length, 'is-missed');
+			if (b.notFound.length) {
+				// The passages, in a row of their own under the book's.
+				const detail = createEl('tr', { cls: 'fpp-import-detail' });
+				detail.createEl('td', { attr: { colspan: String(columns.length) }, text: `Not found: ${b.notFound.slice(0, 30).join(', ')}${b.notFound.length > 30 ? ', …' : ''}` });
+				detail.hidden = true;
+				nf.addClass('is-expandable');
+				nf.setAttr('aria-label', 'Show the passages');
+				nf.addEventListener('click', () => {
+					detail.hidden = !detail.hidden;
+					nf.toggleClass('is-open', !detail.hidden);
+				});
+				tr.after(detail);
 			}
-			if (b.error) li.createDiv({ cls: 'fpp-import-errors', text: `Failed: ${b.error}` });
-			if (b.notFound.length) li.createDiv({ cls: 'setting-item-description', text: `Not found: ${b.notFound.slice(0, 8).join(', ')}${b.notFound.length > 8 ? ', …' : ''}` });
 		}
-		for (const m of missing) list.createEl('li', { cls: 'fpp-import-missing', text: `${m.name}: ${m.count} skipped (not in the vault)` });
+		for (const o of outside) {
+			const skipped = !!o.skipped;
+			const tr = body.createEl('tr', { cls: skipped ? 'is-outside is-skipped' : 'is-outside' });
+			const name = tr.createEl('td', { cls: 'fpp-import-book' });
+			name.createDiv({ cls: 'fpp-import-book-name', text: o.name });
+			name.createDiv({ cls: 'fpp-import-book-note', text: o.reason });
+			cell(tr, o.count, '');
+			tr.createEl('td', { cls: 'fpp-import-left', text: skipped ? 'Skipped' : 'Not imported', attr: { colspan: String(columns.length - 2) } });
+		}
+		if (books.length + outside.length > 1) {
+			const tr = table.createEl('tfoot').createEl('tr');
+			tr.createEl('td', { text: 'Total' });
+			cell(tr, totals.total + left, '');
+			cell(tr, totals.added, 'is-added');
+			cell(tr, totals.duplicates, 'is-duplicate');
+			cell(tr, totals.skipped, 'is-skipped');
+			cell(tr, totals.notFound, 'is-missed');
+		}
 		new Setting(contentEl).addButton((b) => b.setButtonText('Close').setCta().onClick(() => this.close()));
-		new Notice(`${plugin.manifest.name}: imported ${total} highlight${total === 1 ? '' : 's'}`);
+		new Notice(`${plugin.manifest.name}: imported ${plural(added, 'highlight')}`);
 	}
 }

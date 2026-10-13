@@ -9,5 +9,5 @@ export { Annotations } from './annotations';
 export * from './annotation-utils';
 export * from './comment-utils';
 export { askForComment, confirmDeleteHighlight } from './comment-modal';
-export { ImportModal, importHighlights, resolveBooks, type BookImportResult, type ImportSummary } from './import';
+export { ImportModal, importHighlights, resolveBooks, type BookImportResult, type ImportModalOptions, type ImportSummary, type NotImported } from './import';
 export * from './import-utils';

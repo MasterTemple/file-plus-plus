@@ -1143,6 +1143,182 @@ body.fpp-appearance-open .mobile-navbar {
 .fpp-import-errors {
 	color: var(--text-error);
 }
+.fpp-import-modal {
+	width: min(var(--dialog-max-width, 100vw), 46em);
+}
+.fpp-import-table-wrap {
+	container-type: inline-size;
+	overflow-x: auto;
+	margin: var(--size-4-2) 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+}
+.fpp-import-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--font-ui-small);
+	font-variant-numeric: tabular-nums;
+}
+.fpp-import-table th,
+.fpp-import-table td {
+	padding: var(--size-4-2) var(--size-4-3);
+	text-align: end;
+	vertical-align: top;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+.fpp-import-table th:first-child,
+.fpp-import-table td:first-child {
+	text-align: start;
+}
+.fpp-import-table th {
+	position: sticky;
+	top: 0;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-weight: var(--font-semibold);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.2;
+}
+.fpp-import-table th:not(:first-child) {
+	width: 4.5em;
+}
+.fpp-import-table tbody tr:last-child td,
+.fpp-import-table tfoot td {
+	border-bottom: none;
+}
+.fpp-import-table tfoot td {
+	border-top: 1px solid var(--background-modifier-border);
+	font-weight: var(--font-semibold);
+	background: var(--background-secondary);
+}
+.fpp-import-book {
+	min-width: 12em;
+	/* the colored stripe of rows that need a look */
+	border-inline-start: 3px solid transparent;
+}
+.fpp-import-table tr.is-warning .fpp-import-book {
+	border-inline-start-color: var(--color-orange);
+}
+.fpp-import-table tr.is-error .fpp-import-book,
+.fpp-import-table tr.is-outside .fpp-import-book {
+	border-inline-start-color: var(--color-red);
+}
+.fpp-import-table tr.is-outside td {
+	background: rgba(var(--color-red-rgb), 0.06);
+}
+.fpp-import-table tr.is-outside .fpp-import-book-note,
+.fpp-import-table tr.is-outside td.fpp-import-left {
+	color: var(--color-red);
+}
+.fpp-import-table tr.is-outside.is-skipped .fpp-import-book {
+	border-inline-start-color: var(--color-orange);
+}
+.fpp-import-table tr.is-outside.is-skipped td {
+	background: rgba(var(--color-orange-rgb), 0.06);
+}
+.fpp-import-table tr.is-outside.is-skipped .fpp-import-book-note,
+.fpp-import-table tr.is-outside.is-skipped td.fpp-import-left {
+	color: var(--color-orange);
+}
+.fpp-import-book-name {
+	font-weight: var(--font-medium);
+	color: var(--text-normal);
+	word-break: break-word;
+}
+.fpp-import-book-note {
+	margin-top: 2px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+.fpp-import-table td.is-zero {
+	color: var(--text-faint);
+}
+.fpp-import-table td.is-added {
+	color: var(--color-green);
+	font-weight: var(--font-semibold);
+}
+.fpp-import-table td.is-duplicate {
+	color: var(--text-muted);
+}
+.fpp-import-table td.is-skipped {
+	color: var(--color-orange);
+	font-weight: var(--font-semibold);
+	background: rgba(var(--color-orange-rgb), 0.12);
+}
+.fpp-import-table td.is-missed {
+	color: var(--color-red);
+	font-weight: var(--font-semibold);
+	background: rgba(var(--color-red-rgb), 0.12);
+}
+.fpp-import-table td.is-expandable {
+	cursor: pointer;
+	text-decoration: underline dotted;
+	text-underline-offset: 3px;
+}
+.fpp-import-table td.is-expandable.is-open {
+	text-decoration-style: solid;
+}
+.fpp-import-table td.fpp-import-left {
+	text-align: center;
+	font-style: italic;
+}
+/* Narrow (phones): the book's name gets a line of its own above its numbers. */
+@container (max-width: 30em) {
+	.fpp-import-table tr {
+		display: grid;
+		grid-template-columns: repeat(5, 1fr);
+		border-bottom: 1px solid var(--background-modifier-border);
+	}
+	.fpp-import-table tbody tr:last-child {
+		border-bottom: none;
+	}
+	.fpp-import-table th,
+	.fpp-import-table td {
+		border-bottom: none;
+		padding: var(--size-4-1) var(--size-4-2);
+	}
+	.fpp-import-table th:first-child {
+		display: none;
+	}
+	.fpp-import-table th:not(:first-child) {
+		width: auto;
+	}
+	.fpp-import-table td:first-child {
+		grid-column: 1 / -1;
+		padding-top: var(--size-4-2);
+	}
+	.fpp-import-table td.fpp-import-left {
+		grid-column: span 4;
+	}
+	.fpp-import-detail td,
+	.fpp-import-table tfoot td:first-child {
+		grid-column: 1 / -1;
+	}
+	.fpp-import-table tr[hidden] {
+		display: none;
+	}
+	.fpp-import-book {
+		min-width: 0;
+	}
+	/* the stripe runs down the whole row */
+	.fpp-import-table tr .fpp-import-book {
+		border-inline-start-color: transparent !important;
+	}
+	.fpp-import-table tr.is-warning,
+	.fpp-import-table tr.is-outside.is-skipped {
+		box-shadow: inset 3px 0 var(--color-orange);
+	}
+	.fpp-import-table tr.is-error,
+	.fpp-import-table tr.is-outside:not(.is-skipped) {
+		box-shadow: inset 3px 0 var(--color-red);
+	}
+}
+.fpp-import-detail td {
+	text-align: start;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	background: rgba(var(--color-red-rgb), 0.06);
+}
 
 /* ---------- Media player (Transcript++, the Topos Bible plugin; see obsidian/player.ts) ---------- */
 .fpp-player-ui {
