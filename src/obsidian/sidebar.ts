@@ -359,6 +359,9 @@ export class Sidebar {
 		const s = plugin.settings;
 		const ann = file ? plugin.annotator.annotations.find(file) : null;
 		const inAnn = (e: HighlightEntry) => !!ann && e.sourcePath === ann.path;
+		// With the places notes mention the document (not in its annotation file, whose headings name it)
+		const entries = [...this.hlEntries, ...(file ? plugin.mentionsOf(file).filter((m) => !inAnn(m)) : [])];
+		const rangeOf = (e: HighlightEntry) => (e.mention !== undefined ? (reader?.resolve(e.locator) ?? null) : (reader?.highlightRange(e.id) ?? null));
 
 		const bar = el.createDiv('fpp-hl-toolbar');
 		const btn = bar.createEl('button', { cls: 'fpp-hl-annotation-button' });
@@ -374,7 +377,7 @@ export class Sidebar {
 		setIcon(comments, margin ? 'message-square-text' : 'message-square-off');
 		comments.addEventListener('click', () => void this.view.setCommentsShown(!margin));
 
-		const counts = { all: this.hlEntries.length, annotation: this.hlEntries.filter(inAnn).length, other: this.hlEntries.filter((e) => !inAnn(e)).length };
+		const counts = { all: entries.length, annotation: entries.filter(inAnn).length, other: entries.filter((e) => !inAnn(e)).length };
 		const filters = el.createDiv('fpp-segmented fpp-hl-filters');
 		const labels = { all: 'All', annotation: 'Annotation file', other: 'Elsewhere' } as const;
 		for (const f of ['all', 'annotation', 'other'] as const) {
@@ -403,7 +406,7 @@ export class Sidebar {
 		});
 		const toggleAll = groupRow.createDiv({ cls: 'clickable-icon fpp-hl-collapse-all' });
 
-		const shown = this.hlEntries.filter((e) => (s.highlightsFilter === 'all' ? true : s.highlightsFilter === 'annotation' ? inAnn(e) : !inAnn(e)));
+		const shown = entries.filter((e) => (s.highlightsFilter === 'all' ? true : s.highlightsFilter === 'annotation' ? inAnn(e) : !inAnn(e)));
 		if (!shown.length) {
 			const msg =
 				s.highlightsFilter === 'annotation'
@@ -416,7 +419,7 @@ export class Sidebar {
 		}
 
 		// Document order by resolved position (works for every kind of locator alike).
-		const pos = new Map(shown.map((e) => [e, reader?.highlightRange(e.id) ?? null]));
+		const pos = new Map(shown.map((e) => [e, rangeOf(e)]));
 		const sorted = [...shown].sort((a, b) => {
 			const ra = pos.get(a);
 			const rb = pos.get(b);
@@ -482,18 +485,20 @@ export class Sidebar {
 					setIcon(toggleAll, every ? 'chevrons-up-down' : 'chevrons-down-up');
 				});
 			}
-			for (const e of list) this.renderHighlightItem(target, e, palette, inAnn(e) ? ann : null);
+			for (const e of list) this.renderHighlightItem(target, e, palette, inAnn(e) ? ann : null, pos.get(e) ?? null);
 		}
 		el.scrollTop = scroll;
 	}
 
-	private renderHighlightItem(el: HTMLElement, e: HighlightEntry, palette: Record<string, string>, ann: TFile | null): void {
+	private renderHighlightItem(el: HTMLElement, e: HighlightEntry, palette: Record<string, string>, ann: TFile | null, range: Range | null): void {
 		const s = this.view.plugin.settings;
 		const item = el.createDiv('fpp-hl-item');
-		item.style.setProperty('--swatch', (e.color && (palette[e.color] ?? e.color)) || palette[s.defaultColor] || 'var(--text-highlight-bg)');
-		const range = this.view.reader?.highlightRange(e.id);
+		item.toggleClass('is-mention', e.mention !== undefined);
+		item.style.setProperty('--swatch', e.mention !== undefined ? 'var(--background-modifier-border)' : (e.color && (palette[e.color] ?? e.color)) || palette[s.defaultColor] || 'var(--text-highlight-bg)');
 		const text = range?.toString().replace(/\s+/g, ' ').trim();
 		item.createDiv({ cls: 'fpp-hl-text', text: text ? (text.length > 220 ? `${text.slice(0, 220)}…` : text) : '(location not found)' });
+		// A mention: the note's words around it
+		if (e.mention) item.createDiv({ cls: 'fpp-hl-mention', text: e.mention });
 		if (e.comment) {
 			const c = item.createDiv('fpp-hl-comment markdown-rendered');
 			void MarkdownRenderer.render(this.view.app, e.comment, c, e.sourcePath, this.hlRender!);
@@ -503,6 +508,7 @@ export class Sidebar {
 		const label = ann ? (e.heading ?? ann.basename) : e.sourcePath.replace(/\.md$/, '');
 		const note = meta.createEl('a', { cls: 'fpp-hl-note' });
 		if (ann) setIcon(note.createSpan('fpp-hl-note-icon'), 'notebook-pen');
+		else if (e.mention !== undefined) setIcon(note.createSpan({ cls: 'fpp-hl-note-icon', attr: { 'aria-label': 'Mentioned, not linked' } }), 'at-sign');
 		note.createSpan({ text: label });
 		note.setAttr('aria-label', e.sourcePath);
 		note.addEventListener('click', (ev) => {

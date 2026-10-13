@@ -23,6 +23,11 @@ export interface HighlightEntry {
 	comment?: string | null;
 	/** Label of the nearest heading above the link in its note (e.g. the annotation-file section). */
 	heading?: string | null;
+	/**
+	 * A mention, not a link (`plugin.mentionsOf`: a passage a note names): the text around it. Listed
+	 * with the highlights, never drawn in the document
+	 */
+	mention?: string;
 }
 
 /**

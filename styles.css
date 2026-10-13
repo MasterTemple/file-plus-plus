@@ -700,6 +700,17 @@ body.fpp-appearance-open .mobile-navbar {
 	font-weight: var(--font-semibold);
 	color: var(--text-muted);
 }
+/* A place a note mentions the document without linking to it (plugin.mentionsOf): its words, quoted */
+.fpp-hl-mention {
+	margin-top: 4px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	font-style: italic;
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+}
 .fpp-hl-comment {
 	margin-top: 6px;
 	padding: 4px 8px;

@@ -3,7 +3,7 @@ import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, parseLink
 import { around } from './patch';
 import { shareHotkeys } from './hotkeys';
 import { hoverLink } from './hover';
-import { resolveFile } from '../annotator/highlight-index';
+import { resolveFile, type HighlightEntry } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
 import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type LinkPlace, type OpenTarget } from './settings';
 import { Annotator } from '../annotator/annotator';
@@ -195,6 +195,14 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	 */
 	findAnnotationFile(_target: TFile): TFile | null | undefined {
 		return undefined;
+	}
+
+	/**
+	 * Places notes mention in a document without linking to it (Logoxide: `John 3:16` written in a
+	 * note), listed with its highlights (`HighlightEntry.mention`); none by default
+	 */
+	mentionsOf(_target: TFile): HighlightEntry[] {
+		return [];
 	}
 
 	/** Makes the annotation file of the document open in a view, when the format keeps its own (null: the default file) */
