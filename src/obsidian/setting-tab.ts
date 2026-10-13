@@ -2,7 +2,7 @@ import { PluginSettingTab, Setting, debounce, type App } from 'obsidian';
 import { buildAppearanceControls, globalAppearance } from './appearance';
 import type { FilePlusPlusPlugin } from './plugin';
 import { card, md, section, Tabs, type Section, type TabSpec } from './settings-kit';
-import { titleCase, HIGHLIGHT_GESTURE_LABELS, HIGHLIGHT_MENU_LABELS, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, ORIENTATION_LABELS, type HighlightGestureAction, type Orientation, needsComment, newFormatId, syncMenus, type AnnotationMode, type CopyAction, type LinkStyle, type LinkType, type OpenTarget } from './settings';
+import { titleCase, HIGHLIGHT_GESTURE_LABELS, HIGHLIGHT_MENU_LABELS, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, ORIENTATION_LABELS, type HighlightGestureAction, type Orientation, needsComment, newFormatId, syncMenus, type AnnotationMode, type CopyAction, type LinkStyle, type LinkPlace, type LinkType, type OpenTarget } from './settings';
 
 type TabId = 'own' | 'reading' | 'links' | 'highlights' | 'annotations' | 'menus';
 
@@ -350,6 +350,27 @@ export class FppSettingTab extends PluginSettingTab {
 					await save();
 				}),
 			);
+		const places: [LinkPlace, string, string][] = [
+			['mobile', 'on a phone or tablet', ''],
+			['desktop', 'on desktop', ''],
+			['half', 'on desktop, in half the window', ' when it takes about half the width of the panes, or less'],
+		];
+		for (const [place, name, where] of places) {
+			const o = s.linkOpening[place];
+			const choices = { keep: 'Leave the sidebar and comments', sidebar: 'Close the sidebar', comments: 'Hide comments in the margin', both: 'Close the sidebar, hide comments' };
+			new Setting(opening.items)
+				.setName(`Following a link ${name}`)
+				.setDesc(md(`What a link that opens a ${noun} at a passage, or goes to one already open, does to its tab${where}. Comments hidden this way come back with the tab's menu or the *Toggle comments in the margin* command.`))
+				.addDropdown((d) =>
+					d
+						.addOptions(choices)
+						.setValue(o.closeSidebar ? (o.hideComments ? 'both' : 'sidebar') : o.hideComments ? 'comments' : 'keep')
+						.onChange(async (v) => {
+							s.linkOpening[place] = { closeSidebar: v === 'sidebar' || v === 'both', hideComments: v === 'comments' || v === 'both' };
+							await save();
+						}),
+				);
+		}
 		new Setting(opening.items)
 			.setName('Open notes from highlights in')
 			.addDropdown((d) =>

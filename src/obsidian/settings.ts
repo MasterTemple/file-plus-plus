@@ -46,6 +46,15 @@ export const ANNOTATION_MODES: AnnotationMode[] = ['copy', 'insert', 'both'];
 export type LinkStyle = 'auto' | 'wiki' | 'markdown';
 export type OpenTarget = 'split' | 'tab' | 'current';
 
+/** Where a document is open, for how links open it: a phone or tablet, a desktop pane, or half (or less) of the desktop's panes. */
+export type LinkPlace = 'mobile' | 'desktop' | 'half';
+
+/** What a link to a passage does to the tab it opens (or goes to). */
+export interface LinkOpening {
+	closeSidebar: boolean;
+	hideComments: boolean;
+}
+
 /** Desktop or mobile (phones and tablets): where a new device's appearance starts from. */
 export type AppearancePlatform = 'desktop' | 'mobile';
 /** The window's shape: horizontal (landscape) or vertical (portrait). */
@@ -103,6 +112,8 @@ export interface FppSettings {
 	openIn: OpenTarget;
 	/** Where the source note opens when clicking a highlight. */
 	openNoteIn: OpenTarget;
+	/** What a link to a passage does to the tab it opens, by where it is. */
+	linkOpening: Record<LinkPlace, LinkOpening>;
 	/** Whether new views opened with the sidebar, before that was kept on each device (`sidebarState`). */
 	sidebarOpen: boolean;
 	/** Mobile: open the plugin's menu when a selection settles. */
@@ -232,6 +243,11 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	previewHeight: 320,
 	openIn: 'split',
 	openNoteIn: 'split',
+	linkOpening: {
+		mobile: { closeSidebar: false, hideComments: false },
+		desktop: { closeSidebar: false, hideComments: false },
+		half: { closeSidebar: false, hideComments: false },
+	},
 	sidebarOpen: true,
 	selectionBar: true,
 	positions: {},

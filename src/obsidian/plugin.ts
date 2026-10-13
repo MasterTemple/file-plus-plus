@@ -5,7 +5,7 @@ import { shareHotkeys } from './hotkeys';
 import { hoverLink } from './hover';
 import { resolveFile } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
-import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type OpenTarget } from './settings';
+import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type LinkPlace, type OpenTarget } from './settings';
 import { Annotator } from '../annotator/annotator';
 import { DocumentEmbed, registerEmbeds, type EmbedContext } from './embed';
 import { FppSettingTab } from './setting-tab';
@@ -288,6 +288,8 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		// Before v3 one `reader` object served every platform: it becomes both platforms' appearance.
 		const appearance = (p: AppearancePlatform) => ({ ...defaults.appearance[p], ...(data.appearance?.[p] ?? data.reader ?? {}) });
 		this.settings = { ...defaults, ...data, appearance: { desktop: appearance('desktop'), mobile: appearance('mobile') } };
+		const opening = (place: LinkPlace) => ({ ...defaults.linkOpening[place], ...data?.linkOpening?.[place] });
+		this.settings.linkOpening = { mobile: opening('mobile'), desktop: opening('desktop'), half: opening('half') };
 		delete (this.settings as { reader?: unknown }).reader;
 		this.migrateSettings(data);
 		// Formats saved before format ids existed.
@@ -558,7 +560,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 						try {
 							const { path, subpath } = parseLinktext(linktext);
 							const file = path ? plugin.resolveLink(path, sourcePath) : null;
-							if (file) return await plugin.openDocument(file, subpath, newLeaf, state);
+							if (file) return await plugin.openDocument(file, subpath, newLeaf, subpath ? { ...state, eState: { ...(state?.eState as object | undefined), link: true } } : state);
 						} catch (e) {
 							console.error('[fpp] link interception failed', e);
 						}
@@ -620,6 +622,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		await leaf.setViewState({ type, state: { file: file.path, takeOver: false }, active: true });
 	}
 
+	/** Opens a document at a subpath; `eState.link` in `state` says a link to a passage opened it (`linkOpening`). */
 	async openDocument(file: TFile, subpath: string, newLeaf?: PaneType | boolean, state?: OpenViewState): Promise<void> {
 		const { workspace } = this.app;
 		if (!newLeaf) {
@@ -634,6 +637,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 						const l = existing as WorkspaceLeaf & { recordHistory?: (state: unknown) => void; getHistoryState?: () => unknown };
 						if (existing.view.reader?.isRendered) l.recordHistory?.(l.getHistoryState?.());
 						existing.view.navigate(subpath);
+						if ((state?.eState as { link?: boolean } | undefined)?.link) existing.view.openedByLink();
 					}
 				} else await existing.openFile(file, { eState: { subpath: subpath || undefined } });
 				return;

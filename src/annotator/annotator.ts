@@ -91,9 +91,10 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			id: 'toggle-margin-comments',
 			name: 'Toggle comments in the margin',
 			callback: () => {
-				void this.setMarginComments(!this.plugin.settings.marginComments);
-				const shown = this.plugin.settings.marginComments;
 				const v = this.plugin.activeView();
+				if (v) void v.setCommentsShown(!v.showsComments());
+				else void this.setMarginComments(!this.plugin.settings.marginComments);
+				const shown = v ? v.showsComments() : this.plugin.settings.marginComments;
 				if (shown && v?.reader && !v.marginComments.visible) this.plugin.notice(v.plugin.annotator.index.get(v.file?.path ?? '').some((e) => e.comment) ? 'the pane is too narrow for comments in the margin.' : `this ${this.plugin.format.noun} has no comments yet.`);
 			},
 		});
@@ -141,6 +142,8 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	async setMarginComments(on: boolean): Promise<void> {
 		this.plugin.settings.marginComments = on;
 		await this.plugin.saveSettings();
+		// Shown everywhere: also where a link hid them
+		if (on) for (const v of this.plugin.views()) v.commentsHidden = false;
 		// Also re-renders the sidebar's toggle buttons.
 		for (const v of this.plugin.views()) v.refreshHighlights();
 	}

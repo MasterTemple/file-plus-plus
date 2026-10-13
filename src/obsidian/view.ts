@@ -1,7 +1,7 @@
 import { type DocumentReader, type HighlightSpec, type LayerHit, type SelectionInfo, type TocItem } from '../core';
 import { FileView, Menu, Notice, Platform, Scope, TFile, setIcon, type HoverParent, type MenuItem, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import type { HighlightEntry } from '../annotator/highlight-index';
-import { SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, type AnnotationMode, type HighlightGestureAction } from './settings';
+import { SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, type AnnotationMode, type HighlightGestureAction, type LinkPlace } from './settings';
 import type { CopyTarget, FilePlusPlusPlugin } from './plugin';
 import { AppearancePanel } from './appearance';
 import { Sidebar } from './sidebar';
@@ -51,6 +51,10 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	private pendingSubpath: string | null = null;
 	/** Whether the pending jump flashes its passage (a link does; a position restored from history doesn't). */
 	private pendingFlash = true;
+	/** A link to a passage opened this tab before its document showed: `openedByLink` again once it does. */
+	private linkPending = false;
+	/** Comments in the margin hidden in this tab by a link (`linkOpening`), until shown again here or everywhere. */
+	commentsHidden = false;
 	private loadToken = 0;
 	private offIndex: (() => void) | null = null;
 	private annotationTip!: AnnotationTip;
@@ -236,6 +240,10 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			this.bindReader(reader);
 			// Over the text, the sidebar opens as it was last left on phones, and closed in narrow panes on desktop
 			if (this.sidebarIsOverlay() && !this.reloading) this.toggleSidebar(Platform.isMobile && this.plugin.sidebarState().open, false);
+			if (this.linkPending) {
+				this.linkPending = false;
+				this.openedByLink();
+			}
 			this.chapterEl.setText(this.title());
 			this.sidebar.setToc(reader.toc);
 			this.refreshHighlights();
@@ -301,7 +309,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	}
 
 	override setEphemeralState(state: unknown): void {
-		const s = state as { subpath?: string; position?: unknown } | null;
+		const s = state as { subpath?: string; position?: unknown; link?: boolean } | null;
+		if (s?.link && s.subpath) {
+			this.openedByLink();
+			this.linkPending = !this.reader?.isRendered;
+		}
 		// A link's subpath wins; otherwise a position from history is restored without a flash.
 		const target = s?.subpath || (typeof s?.position === 'string' ? s.position : null);
 		if (target) {
@@ -508,6 +520,38 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	refreshHighlights(): void {
 		this.annotations.refreshHighlights();
+	}
+
+	/** Whether this tab shows comments in the margin (when there's room): the setting, unless a link hid them here. */
+	showsComments(): boolean {
+		return this.plugin.settings.marginComments && !this.commentsHidden;
+	}
+
+	/** Shows comments in the margin (here, and everywhere if they're off), or hides them everywhere. */
+	async setCommentsShown(on: boolean): Promise<void> {
+		if (on && this.plugin.settings.marginComments) {
+			this.commentsHidden = false;
+			this.refreshHighlights();
+		} else await this.plugin.annotator.setMarginComments(on);
+	}
+
+	/** Where this tab is, for `linkOpening`: on a phone or tablet, or a desktop pane taking (more than) about half the panes' width. */
+	linkPlace(): LinkPlace {
+		if (Platform.isMobile) return 'mobile';
+		const panes = (this.app.workspace as unknown as { rootSplit?: { containerEl?: HTMLElement } }).rootSplit?.containerEl;
+		const width = this.containerEl.offsetWidth;
+		const all = panes?.offsetWidth || this.containerEl.win.innerWidth;
+		return width > 0 && width <= all * 0.6 ? 'half' : 'desktop';
+	}
+
+	/** A link to a passage opened this tab or went to it: close the sidebar and hide comments, as `linkOpening` says for where it is. */
+	openedByLink(): void {
+		const o = this.plugin.settings.linkOpening[this.linkPlace()];
+		if (o.closeSidebar) this.toggleSidebar(false, false);
+		if (o.hideComments && !this.commentsHidden) {
+			this.commentsHidden = true;
+			if (this.reader?.isRendered) this.refreshHighlights();
+		}
 	}
 
 	/** Show (or hide) comments in the margin, per settings; when there is no room they show on hover. */
@@ -1048,9 +1092,9 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			i
 				.setTitle('Comments in the margin')
 				.setIcon('message-square-text')
-				.setChecked(this.plugin.settings.marginComments)
+				.setChecked(this.showsComments())
 				.setSection('view')
-				.onClick(() => void this.plugin.annotator.setMarginComments(!this.plugin.settings.marginComments)),
+				.onClick(() => void this.setCommentsShown(!this.showsComments())),
 		);
 		const ann = this.plugin.annotator.annotations.find(this.file);
 		menu.addItem((i) =>

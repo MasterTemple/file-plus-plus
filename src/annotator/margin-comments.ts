@@ -41,7 +41,7 @@ export class MarginComments extends Component {
 		const reader = this.view.reader;
 		if (!reader?.isRendered) return;
 		const margin = reader.margin;
-		margin.setEnabled(this.view.plugin.settings.marginComments);
+		margin.setEnabled(this.view.showsComments());
 		const notes: MarginNote[] = [];
 		const seen = new Set<string>();
 		const file = this.view.file;

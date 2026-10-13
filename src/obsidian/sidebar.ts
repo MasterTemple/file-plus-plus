@@ -346,10 +346,10 @@ export class Sidebar {
 		const eye = bar.createDiv({ cls: 'clickable-icon fpp-hl-eye', attr: { 'aria-label': hidden ? `Show highlights in the ${plugin.format.noun}` : `Hide highlights in the ${plugin.format.noun}` } });
 		setIcon(eye, hidden ? 'eye-off' : 'eye');
 		eye.addEventListener('click', () => void plugin.annotator.setHighlightsHidden(!hidden));
-		const margin = s.marginComments;
+		const margin = this.view.showsComments();
 		const comments = bar.createDiv({ cls: 'clickable-icon fpp-hl-eye', attr: { 'aria-label': margin ? 'Hide comments in the margin' : 'Show comments in the margin' } });
 		setIcon(comments, margin ? 'message-square-text' : 'message-square-off');
-		comments.addEventListener('click', () => void plugin.annotator.setMarginComments(!margin));
+		comments.addEventListener('click', () => void this.view.setCommentsShown(!margin));
 
 		const counts = { all: this.hlEntries.length, annotation: this.hlEntries.filter(inAnn).length, other: this.hlEntries.filter((e) => !inAnn(e)).length };
 		const filters = el.createDiv('fpp-segmented fpp-hl-filters');
