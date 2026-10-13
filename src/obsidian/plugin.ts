@@ -1,6 +1,7 @@
 import { formatLocator, type DocumentReader, type ReaderSettings } from '../core';
 import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, parseLinktext, type PaneType, type ViewState, type Workspace, type OpenViewState } from 'obsidian';
 import { around } from './patch';
+import { shareHotkeys } from './hotkeys';
 import { resolveFile } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
 import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type OpenTarget } from './settings';
@@ -123,6 +124,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.addSettingTab(new FppSettingTab(this.app, this as unknown as FilePlusPlusPlugin));
 		this.patchLinkOpening();
 		this.patchViewOpening();
+		this.register(shareHotkeys(this.app));
 		this.registerIndexEvents();
 		this.registerCommands();
 		this.annotator.load();
