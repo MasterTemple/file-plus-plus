@@ -188,6 +188,20 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 
 
 
+	/**
+	 * A document's annotation file, when the format keeps its own (a Bible book's notes, shared by
+	 * its translations): the file, null when it has none yet, or undefined to look for a note whose
+	 * frontmatter links to the document (the default)
+	 */
+	findAnnotationFile(_target: TFile): TFile | null | undefined {
+		return undefined;
+	}
+
+	/** Makes the annotation file of the document open in a view, when the format keeps its own (null: the default file) */
+	async createAnnotationFile(_view: DocumentView<Doc, R>): Promise<TFile | null> {
+		return null;
+	}
+
 	/** The format's file a link path points to, if any. */
 	resolveLink(path: string, sourcePath: string): TFile | null {
 		return resolveFile(this.app, path, sourcePath, this.format.extensions);

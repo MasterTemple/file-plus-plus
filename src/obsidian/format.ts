@@ -77,4 +77,10 @@ export interface FileFormat<Doc = unknown, R extends DocumentReader = DocumentRe
 	};
 	/** TOC entries that annotation files get headings for (default: all). */
 	annotationHeadings?(toc: TocItem[]): TocItem[];
+	/**
+	 * Where a block of an annotation file is, from its text when no link in it says (`## John 3`, a
+	 * heading naming a passage rather than linking to it): a locator in `target` (the document the
+	 * file is for), or null
+	 */
+	locatorOfText?(markdown: string, target: TFile | null): string | null;
 }

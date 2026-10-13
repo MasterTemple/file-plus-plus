@@ -28,6 +28,8 @@ export class Annotations {
 
 	/** The annotation file of a document: a note whose `<frontmatterKey>` property links to it. */
 	find(target: TFile): TFile | null {
+		const own = this.plugin.findAnnotationFile(target);
+		if (own !== undefined) return own;
 		const { metadataCache, vault } = this.app;
 		for (const f of vault.getMarkdownFiles()) {
 			const links = metadataCache.getFileCache(f)?.frontmatterLinks;
@@ -58,6 +60,8 @@ export class Annotations {
 		const target = view.file!;
 		const existing = this.find(target);
 		if (existing) return existing;
+		const own = await this.plugin.createAnnotationFile(view as never);
+		if (own) return own;
 		const { reader, document: doc } = view;
 		if (!reader || !doc) throw new Error(`The ${this.format.noun} is not loaded yet`);
 		const s = this.plugin.settings;
@@ -113,7 +117,8 @@ export class Annotations {
 					}
 					return position.key(loc.locator);
 				}
-				return null;
+				const own = this.format.locatorOfText?.(markdown, view.file);
+				return own ? position.key(own) : null;
 			},
 		};
 	}
