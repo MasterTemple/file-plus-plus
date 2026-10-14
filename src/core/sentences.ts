@@ -174,3 +174,50 @@ export function sentenceContext(text: string, start: number, end: number, lang?:
 	if (!(s.whole && e.whole)) return { start: s.start, end: e.end, needPrev: false, needNext: false };
 	return { start: s.prev?.[0] ?? s.start, end: e.next?.[1] ?? e.end, needPrev: !s.prev, needNext: !e.next };
 }
+
+/** The words of a range (letters and digits, not the punctuation and spaces between them), in order */
+export function wordRanges(range: Range, lang?: string): Range[] {
+	const doc = range.startContainer.ownerDocument ?? (range.startContainer as Document);
+	const root = range.commonAncestorContainer;
+	// The range's text: each text node's part inside it
+	const parts: { node: Text; from: number; start: number }[] = [];
+	let text = '';
+	const add = (t: Text) => {
+		if (t.parentElement?.closest('script, style, rt, rp')) return;
+		const from = t === range.startContainer ? range.startOffset : 0;
+		const to = t === range.endContainer ? range.endOffset : t.data.length;
+		if (to <= from) return;
+		parts.push({ node: t, from, start: text.length });
+		text += t.data.slice(from, to);
+	};
+	if (root.nodeType === Node.TEXT_NODE) add(root as Text);
+	else {
+		const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+		for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) if (range.intersectsNode(n)) add(n);
+	}
+	if (!parts.length) return [];
+	const point = (pos: number, end: boolean): [Text, number] => {
+		for (let i = parts.length - 1; i >= 0; i--) {
+			const p = parts[i];
+			if (end ? pos > p.start : pos >= p.start) return [p.node, p.from + pos - p.start];
+		}
+		return [parts[0].node, parts[0].from];
+	};
+	const spans: [number, number][] = [];
+	const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+	if (Segmenter) {
+		let segmenter: Intl.Segmenter;
+		try {
+			segmenter = new Segmenter(lang || undefined, { granularity: 'word' });
+		} catch {
+			segmenter = new Segmenter(undefined, { granularity: 'word' });
+		}
+		for (const w of segmenter.segment(text)) if (w.isWordLike) spans.push([w.index, w.index + w.segment.length]);
+	} else for (const m of text.matchAll(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu)) spans.push([m.index!, m.index! + m[0].length]);
+	return spans.map(([a, b]) => {
+		const r = doc.createRange();
+		r.setStart(...point(a, false));
+		r.setEnd(...point(b, true));
+		return r;
+	});
+}

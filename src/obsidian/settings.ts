@@ -53,10 +53,15 @@ export const READER_KEY_ACTIONS = [
 	{ id: 'open-file', key: 'e', name: 'Open another document', desc: 'As the command (a file picker for this format only).' },
 	{ id: 'hint-highlight', key: 'h', name: 'Highlight a sentence', desc: 'Labels the sentences in view; type a label to highlight its sentence in the current color, with the copy format chosen below. Escape: never mind.' },
 	{ id: 'hint-comment', key: 'c', name: 'Comment on a sentence', desc: 'Likewise, with the copy format for comments.' },
+	{ id: 'hint-words-highlight', key: 'H', name: 'Highlight from a word to a word', desc: 'Likewise, picking where the highlight starts and ends, word by word (as chosen below).' },
+	{ id: 'hint-words-comment', key: 'C', name: 'Comment from a word to a word' },
 	{ id: 'comments', key: 'g c', name: 'Toggle comments in the margin' },
 	{ id: 'highlights', key: 'g h', name: 'Toggle highlights' },
 ] as const;
 export type ReaderKeyAction = (typeof READER_KEY_ACTIONS)[number]['id'];
+
+/** How `H` / `C` pick a passage: start sentence, start word, end sentence, end word; or start word, end word. */
+export type WordHintFlow = 'sentence' | 'word';
 
 /** The format's own locator (`primary`: an EPUB CFI, a timestamp…) or a text fragment. */
 export type LinkType = 'primary' | 'text';
@@ -120,6 +125,8 @@ export interface FppSettings {
 	hintFormat: CopyAction;
 	/** …and with a comment (`hint-comment`). */
 	hintCommentFormat: CopyAction;
+	/** Picking a passage word by word (`hint-words-highlight`): through its sentences first, or among every word in view. */
+	wordHintFlow: WordHintFlow;
 	/** Color picked last in a menu or the palette (null = no color); undefined until first pick. */
 	lastColor?: string | null;
 	/** Include `&color=` in copied links. */
@@ -257,6 +264,7 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	hintKeys: 'asdfjklghqweruio',
 	hintFormat: 'format:callout',
 	hintCommentFormat: 'format:callout-comment',
+	wordHintFlow: 'sentence',
 	colorInLinks: true,
 	timestampInLinks: true,
 	marginComments: true,

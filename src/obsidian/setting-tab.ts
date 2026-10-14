@@ -4,7 +4,7 @@ import { buildAppearanceControls, globalAppearance } from './appearance';
 import { chordOf, parseBinding } from './key-sequence';
 import type { FilePlusPlusPlugin } from './plugin';
 import { card, md, section, Tabs, type Section, type TabSpec } from './settings-kit';
-import { DEFAULT_SETTINGS, titleCase, READER_KEY_ACTIONS, HIGHLIGHT_GESTURE_LABELS, HIGHLIGHT_MENU_LABELS, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, ORIENTATION_LABELS, type HighlightGestureAction, type Orientation, needsComment, newFormatId, syncMenus, type AnnotationMode, type CopyAction, type LinkStyle, type LinkPlace, type LinkType, type OpenTarget } from './settings';
+import { DEFAULT_SETTINGS, titleCase, READER_KEY_ACTIONS, HIGHLIGHT_GESTURE_LABELS, HIGHLIGHT_MENU_LABELS, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, ORIENTATION_LABELS, type HighlightGestureAction, type Orientation, needsComment, newFormatId, syncMenus, type AnnotationMode, type CopyAction, type LinkStyle, type LinkPlace, type LinkType, type OpenTarget, type WordHintFlow } from './settings';
 
 type TabId = 'own' | 'reading' | 'links' | 'highlights' | 'annotations' | 'menus';
 
@@ -373,7 +373,7 @@ export class FppSettingTab extends PluginSettingTab {
 			.setName('Sentence labels')
 			.setDesc(
 				md(
-					`The keys that label the sentences in view (\`h\` / \`c\` above, or the commands *${manifest.name}: Highlight a sentence in view* and *Comment on a sentence in view*), the best first. One key each while they fit, else two.`,
+					`The keys that label the sentences and words in view (\`h\` / \`c\` and \`H\` / \`C\` above, or the commands *${manifest.name}: Highlight a sentence in view* and *Comment on a sentence in view*), the best first. One key each while they fit, else two.`,
 				),
 			)
 			.addText((t) =>
@@ -398,6 +398,18 @@ export class FppSettingTab extends PluginSettingTab {
 						await save();
 					});
 				});
+		new Setting(keys.items)
+			.setName('Picking from word to word')
+			.setDesc(md('How `H` / `C` pick where a passage starts and ends. Every word in view takes longer labels, and a lot of them.'))
+			.addDropdown((d) =>
+				d
+					.addOptions({ sentence: 'Sentence, word, sentence, word', word: 'Word, word (every word labeled)' })
+					.setValue(s.wordHintFlow)
+					.onChange(async (v) => {
+						s.wordHintFlow = v as WordHintFlow;
+						await save();
+					}),
+			);
 		hintFormat('Highlighting a sentence copies', `As the copy format's command, in the current color: into the ${noun}'s annotation file, per its mode.`, 'hintFormat');
 		hintFormat('Commenting on a sentence copies', 'Likewise; a format with {{comment}} asks for the comment.', 'hintCommentFormat');
 

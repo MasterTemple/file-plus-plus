@@ -60,6 +60,8 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'open-file': () => command('open-file'),
 		'hint-highlight': () => command('highlight-sentence'),
 		'hint-comment': () => command('comment-on-sentence'),
+		'hint-words-highlight': () => command('highlight-words'),
+		'hint-words-comment': () => command('comment-on-words'),
 		comments: () => command('toggle-margin-comments'),
 		highlights: () => command('toggle-highlights'),
 		'next-highlight': () => command('next-highlight'),

@@ -11,7 +11,7 @@ import { askForComment, confirmDeleteHighlight } from './comment-modal';
 import { getComment, removeHighlight, setComment } from './comment-utils';
 import { HighlightIndex, type HighlightEntry } from './highlight-index';
 import { ImportModal } from './import';
-import { pickSentence } from '../obsidian/sentence-hints';
+import { pickSentence, pickWords } from '../obsidian/sentence-hints';
 
 /**
  * The note-taking layer over the viewer: links from notes into a document are its highlights (the
@@ -118,9 +118,11 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 				},
 			});
 		// Labels on the sentences in view; typing one copies its sentence as the hint format (in the current color)
-		for (const [id, name, comment] of [
-			['highlight-sentence', 'Highlight a sentence in view (by its label)', false],
-			['comment-on-sentence', 'Comment on a sentence in view (by its label)', true],
+		for (const [id, name, comment, words] of [
+			['highlight-sentence', 'Highlight a sentence in view (by its label)', false, false],
+			['comment-on-sentence', 'Comment on a sentence in view (by its label)', true, false],
+			['highlight-words', 'Highlight from a word to a word in view (by their labels)', false, true],
+			['comment-on-words', 'Comment from a word to a word in view (by their labels)', true, true],
 		] as const)
 			this.plugin.addCommand({
 				id,
@@ -128,7 +130,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 				checkCallback: (checking) => {
 					const v = this.plugin.activeView();
 					if (!v?.reader) return false;
-					if (!checking) this.pickSentence(v, comment);
+					if (!checking) this.pickPassage(v, comment, words);
 					return true;
 				},
 			});
@@ -161,8 +163,11 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		this.syncFormatCommands();
 	}
 
-	/** Label the sentences in view; the one picked is copied (and inserted) as the hint format, or the comment one. */
-	pickSentence(view: DocumentView<Doc, R>, comment: boolean): void {
+	/**
+	 * Label the sentences in view (`words`: pick a passage from word to word); what's picked is copied
+	 * (and inserted) as the hint format, or the comment one.
+	 */
+	pickPassage(view: DocumentView<Doc, R>, comment: boolean, words = false): void {
 		const s = this.plugin.settings;
 		const formats = s.copyFormats;
 		const what = comment
@@ -170,7 +175,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			: (this.resolveCopyAction(s.hintFormat) ?? formats.find((f) => !needsComment(f.template)) ?? 'link');
 		const color = view.activeColor;
 		const css = (color && s.palette.find((p) => p.name === color)?.color) || '#d4d4d4';
-		const shown = pickSentence(view as unknown as DocumentView, s.hintKeys, css, async (range) => {
+		const shown = (words ? (v: DocumentView, keys: string, c: string, f: (r: Range) => void) => pickWords(v, keys, c, s.wordHintFlow, f) : pickSentence)(view as unknown as DocumentView, s.hintKeys, css, async (range) => {
 			const reader = view.reader;
 			const info = reader?.describeRange(range);
 			if (!reader || !info) return;

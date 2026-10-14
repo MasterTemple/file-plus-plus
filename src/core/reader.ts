@@ -5,7 +5,7 @@ import { searchIndex, type SearchMatch, type SearchOptions } from './search';
 import { TextIndex } from './text-index';
 import { Emitter } from './emitter';
 import { rangeToMarkdown } from './markdown';
-import { blockText, sentenceBounds, sentenceEndAt, sentenceRange, sentenceRanges, sentenceStartAt } from './sentences';
+import { blockText, sentenceBounds, sentenceEndAt, sentenceRange, sentenceRanges, sentenceStartAt, wordRanges } from './sentences';
 import { BASE_CSS, DEFAULT_SETTINGS, settingsToVars, type ReaderSettings } from './settings';
 import { Margin } from './margin';
 import { HINT_CSS } from './hints';
@@ -735,11 +735,31 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			if (r.top >= view.bottom) break;
 			if (r.bottom <= view.top || !r.height) continue;
 			for (const range of sentenceRanges(block, langOf(block))) {
-				const line = Array.from(range.getClientRects()).find((q) => q.width > 0 && q.height > 0 && q.bottom > view.top + 2 && q.top < view.bottom - 2);
+				const line = this.lineInView(range, view);
 				if (line) out.push({ range, x: line.left, y: line.top });
 			}
 		}
 		return out;
+	}
+
+	/** The words in view (of `within`, else of every sentence in view), each with where it starts, as `visibleSentences` */
+	visibleWords(within?: Range): { range: Range; x: number; y: number }[] {
+		if (!this.scroller.isConnected || !this.scroller.clientHeight) return [];
+		const view = this.scroller.getBoundingClientRect();
+		const out: { range: Range; x: number; y: number }[] = [];
+		for (const part of within ? [within] : this.visibleSentences().map((s) => s.range)) {
+			const block = this.blockOf(part.startContainer);
+			for (const range of wordRanges(part, block ? langOf(block) : undefined)) {
+				const line = this.lineInView(range, view);
+				if (line) out.push({ range, x: line.left, y: line.top });
+			}
+		}
+		return out;
+	}
+
+	/** The first line box of `range` inside the viewport `view` */
+	private lineInView(range: Range, view: DOMRect): DOMRect | undefined {
+		return Array.from(range.getClientRects()).find((q) => q.width > 0 && q.height > 0 && q.bottom > view.top + 2 && q.top < view.bottom - 2);
 	}
 
 	// ---------------------------------------------------------------------------------------------
