@@ -77,6 +77,8 @@ export interface FppSettings {
 	bookAppearance: Record<string, Record<string, Partial<ReaderSettings>>>;
 	palette: PaletteColor[];
 	defaultColor: string;
+	/** Bare 1–9 pick a palette color (0: none) while a document is focused (not while typing). */
+	numberKeyColors: boolean;
 	/** Color picked last in a menu or the palette (null = no color); undefined until first pick. */
 	lastColor?: string | null;
 	/** Include `&color=` in copied links. */
@@ -204,6 +206,7 @@ export const DEFAULT_SETTINGS: FppSettings = {
 		{ name: 'purple', color: '#b07cff' },
 	],
 	defaultColor: 'yellow',
+	numberKeyColors: false,
 	colorInLinks: true,
 	timestampInLinks: true,
 	marginComments: true,

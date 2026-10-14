@@ -820,8 +820,8 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return true;
 				},
 			});
-		// No default hotkeys: bound to bare digits by whoever wants them. Off while typing (the
-		// sidebar's search, a comment), so the key then types; shareHotkeys passes it on.
+		// No default hotkeys. Off while typing (the sidebar's search, a comment), so a key bound to
+		// one then types; shareHotkeys passes it on.
 		const typing = () => {
 			const el = activeDocument.activeElement as HTMLElement | null;
 			return !!el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
@@ -838,6 +838,16 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return true;
 				},
 			});
+		// Obsidian's hotkey settings won't record a bare digit, so the setting handles them itself.
+		this.registerDomEvent(document, 'keydown', (e) => {
+			if (!this.settings.numberKeyColors || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || !/^Digit\d$/.test(e.code)) return;
+			const v = this.activeView();
+			const n = Number(e.code.slice(5));
+			const color = n === 0 ? null : this.settings.palette[n - 1];
+			if (!v?.reader || color === undefined || typing()) return;
+			e.preventDefault();
+			v.setActiveColor(color?.name ?? null);
+		});
 		for (let i = 1; i <= 9; i++) colorCommand(`color-${i}`, `Use highlight color ${i} (palette order)`, () => this.settings.palette[i - 1]);
 		colorCommand('color-none', 'Use no highlight color', () => null);
 		this.addCommand({ id: 'appearance', name: 'Reading appearance', checkCallback: withView((v) => v.toggleAppearance()) });

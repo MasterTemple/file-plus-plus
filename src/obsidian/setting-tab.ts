@@ -536,6 +536,15 @@ export class FppSettingTab extends PluginSettingTab {
 					this.plugin.refreshPalette();
 				});
 			});
+		new Setting(colors.items)
+			.setName('Number keys pick the color')
+			.setDesc('1–9 pick a color in palette order, 0 no color, while a document is focused and you aren\u2019t typing. Obsidian hotkeys need a modifier; the commands "Use highlight color 1…9" take one.')
+			.addToggle((t) =>
+				t.setValue(s.numberKeyColors).onChange(async (v) => {
+					s.numberKeyColors = v;
+					await save();
+				}),
+			);
 		const palette = colors.items === containerEl ? containerEl : card(colors);
 		s.palette.forEach((p, i) => {
 			const row = new Setting(palette).setClass('fpp-color-row');
