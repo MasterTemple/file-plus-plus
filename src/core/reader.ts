@@ -558,6 +558,27 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return true;
 	}
 
+	/**
+	 * Jump to the very start or end (Vim's `g g` / `G`). Sections near the end are laid out
+	 * (content-visibility) only once there, changing the height: the end is followed until the
+	 * height holds for 10 frames (at most a second), unless another jump comes first.
+	 */
+	scrollToEdge(edge: 'start' | 'end'): void {
+		const seq = ++this.scrollSeq;
+		this.win.clearTimeout(this.relocateTimer);
+		const el = this.scroller;
+		let height = -1;
+		let stable = 0;
+		const go = (frames: number) => {
+			if (seq !== this.scrollSeq) return;
+			el.scrollTop = edge === 'start' ? 0 : el.scrollHeight;
+			stable = el.scrollHeight === height ? stable + 1 : 0;
+			height = el.scrollHeight;
+			if (edge === 'end' && frames > 0 && stable < 10) this.win.requestAnimationFrame(() => go(frames - 1));
+		};
+		go(60);
+	}
+
 	/** Bumped by every jump; deferred scrolls of an older jump (or restore) check it and give way. */
 	private scrollSeq = 0;
 

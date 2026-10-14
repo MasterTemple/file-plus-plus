@@ -32,8 +32,8 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'page-up': (v) => scroll(v, -0.5),
 		'set-mark': (v) => (awaiting = { action: 'set-mark', view: v }),
 		'go-to-mark': (v) => (awaiting = { action: 'go-to-mark', view: v }),
-		top: (v) => v.reader!.scroller.scrollTo({ top: 0 }),
-		bottom: (v) => v.reader!.scroller.scrollTo({ top: v.reader!.scroller.scrollHeight }),
+		top: (v) => v.reader!.scrollToEdge('start'),
+		bottom: (v) => v.reader!.scrollToEdge('end'),
 		'jump-back': (v) => travel(v, -1),
 		'jump-forward': (v) => travel(v, 1),
 		search: (v) => {
