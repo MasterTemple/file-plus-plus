@@ -1,6 +1,8 @@
 import { Modal, Notice, Setting, TFile, type App } from 'obsidian';
 import { bookKey, commentKey, parseImport, sameText, textFragmentFor, type ImportEntry, type ParsedImport } from './import-utils';
 import { needsComment, titleCase, type CopyAction, type ImportKind } from '../obsidian/settings';
+import { getComment, highlightBlock, replaceHighlight } from './comment-utils';
+import type { HighlightEntry } from './highlight-index';
 import type { FilePlusPlusPlugin } from '../obsidian/plugin';
 import type { DocumentView } from '../obsidian/view';
 
@@ -12,6 +14,8 @@ export interface BookImportResult {
 	/** Highlights the import had for this document. */
 	total: number;
 	added: number;
+	/** Already in the annotation file at the same passage: their callout rewritten in the current format. */
+	replaced: number;
 	duplicates: number;
 	/** Of a kind (with / without comment) that was turned off. */
 	skipped: number;
@@ -93,17 +97,28 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 	let n = 0;
 	for (const [file, entries] of byFile) {
 		onProgress?.(`${file.basename} (${++n} of ${byFile.size})…`);
-		const result: BookImportResult = { file, annotationFile: null, created: false, total: entries.length, added: 0, duplicates: 0, skipped: 0, foundByText: 0, notFound: [] };
+		const result: BookImportResult = { file, annotationFile: null, created: false, total: entries.length, added: 0, replaced: 0, duplicates: 0, skipped: 0, foundByText: 0, notFound: [] };
 		books.push(result);
 		try {
 			const view = await viewFor(plugin, file);
 			const reader = view.reader!;
 			const passage = (range: Range) => reader.locatorFromRange(range) ?? range.toString();
+			const existingAnn = plugin.annotator.annotations.find(file);
+			const annData = existingAnn ? await plugin.app.vault.read(existingAnn) : '';
 			const seen = new Set<string>();
+			/** Callouts in the annotation file by passage: importing the same passage again rewrites them. */
+			const own = new Map<string, { entry: HighlightEntry; at: number; text: string; comment: string }>();
 			for (const h of plugin.annotator.index.get(file.path)) {
 				const r = reader.resolve(h.locator);
-				if (r) seen.add(`${passage(r)}\u0000${commentKey(h.comment)}`);
+				if (!r) continue;
+				const p = passage(r);
+				seen.add(`${p}\u0000${commentKey(h.comment)}`);
+				if (!existingAnn || h.sourcePath !== existingAnn.path || h.mention || own.has(p)) continue;
+				const at = linkOffset(annData, h);
+				const block = at === -1 ? null : highlightBlock(annData, at, at + h.original.length);
+				if (block) own.set(p, { entry: h, at, text: block.text, comment: getComment(annData.split('\n'), block.start) ?? '' });
 			}
+			const replacements: { entry: HighlightEntry; block: string }[] = [];
 			const items: { info: NonNullable<ReturnType<typeof reader.describeRange>>; block: string }[] = [];
 			for (const e of entries) {
 				let range = reader.resolve(e.locator);
@@ -121,7 +136,28 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 					result.notFound.push(`#${e.index + 1}${snippet ? ` "${snippet}${snippet.length === 40 ? '…' : ''}"` : ''}`);
 					continue;
 				}
-				const key = `${passage(info.range)}\u0000${commentKey(e.comment)}`;
+				const p = passage(info.range);
+				const old = own.get(p);
+				if (old) {
+					// The same passage, imported before (or highlighted here): rewrite it in the current format,
+					// keeping its comment when the import has none.
+					own.delete(p);
+					const comment = e.comment || old.comment;
+					seen.add(`${p}\u0000${commentKey(comment)}`);
+					const kind = comment ? s.importComment : s.importPlain;
+					if (!kind.enabled) {
+						result.skipped++;
+						continue;
+					}
+					const block = plugin.annotator.renderCopy(view, info, importAction(plugin, kind.format), e.color, comment, {}, e.updated).replace(/\n+$/, '');
+					if (block === old.text) result.duplicates++;
+					else {
+						replacements.push({ entry: old.entry, block });
+						result.replaced++;
+					}
+					continue;
+				}
+				const key = `${p}\u0000${commentKey(e.comment)}`;
 				if (seen.has(key)) {
 					result.duplicates++;
 					continue;
@@ -132,9 +168,16 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 					result.skipped++;
 					continue;
 				}
-				let what = plugin.annotator.resolveCopyAction(kind.format) ?? 'link';
-				if (what === 'text' || what === 'alt-link') what = 'link';
-				items.push({ info, block: plugin.annotator.renderCopy(view, info, what, e.color, e.comment, {}, e.updated) });
+				items.push({ info, block: plugin.annotator.renderCopy(view, info, importAction(plugin, kind.format), e.color, e.comment, {}, e.updated) });
+			}
+			if (replacements.length && existingAnn) {
+				result.annotationFile = existingAnn;
+				await plugin.app.vault.process(existingAnn, (data) => {
+					// From the end, so the offsets of the ones before stay valid.
+					const located = replacements.map((r) => ({ ...r, at: linkOffset(data, r.entry) })).filter((r) => r.at !== -1);
+					for (const r of located.sort((a, b) => b.at - a.at)) data = replaceHighlight(data, r.at, r.at + r.entry.original.length, r.block) ?? data;
+					return data;
+				});
 			}
 			if (!items.length) continue;
 			let ann = plugin.annotator.annotations.find(file);
@@ -150,6 +193,18 @@ export async function importHighlights(plugin: FilePlusPlusPlugin, parsed: Impor
 		}
 	}
 	return { books, missing: [...missing].map(([name, count]) => ({ name, count })) };
+}
+
+/** What an import kind's format inserts (a link at least). */
+function importAction(plugin: FilePlusPlusPlugin, format: CopyAction) {
+	const what = plugin.annotator.resolveCopyAction(format) ?? 'link';
+	return what === 'text' || what === 'alt-link' ? 'link' : what;
+}
+
+/** Where a highlight's link is in its note's text (its indexed position, or found by its text), or -1. */
+function linkOffset(data: string, entry: HighlightEntry): number {
+	const { start, end } = entry.position;
+	return data.slice(start.offset, end.offset) === entry.original ? start.offset : data.indexOf(entry.original);
 }
 
 const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
@@ -185,7 +240,7 @@ export class ImportModal extends Modal {
 
 		contentEl.createEl('p', {
 			cls: 'setting-item-description',
-			text: `A list of highlights, each with its ${format.noun} ("book": path or file name), passage ("cfi", "locator", "textFragment", or just "text"), and optionally "comment", "color" and "updated". They go into each ${format.noun}'s annotation file (created if needed), in ${format.noun} order. Highlights already in your notes with the same passage and comment are skipped.`,
+			text: `A list of highlights, each with its ${format.noun} ("book": path or file name), passage ("cfi", "locator", "textFragment", or just "text"), and optionally "comment", "color" and "updated". They go into each ${format.noun}'s annotation file (created if needed), in ${format.noun} order. Highlights already in your notes with the same passage and comment are skipped; ones already in the annotation file at the same passage are rewritten in the format chosen below.`,
 		});
 		const area = contentEl.createEl('textarea', { cls: 'fpp-import-json', attr: { rows: '8', placeholder: '[{ "book": "…", "cfi": "epubcfi(…)", "comment": "…", "color": "yellow" }]', spellcheck: 'false' } });
 		area.value = this.json;
@@ -290,13 +345,16 @@ export class ImportModal extends Modal {
 		const sum = (f: (b: BookImportResult) => number) => books.reduce((n, b) => n + f(b), 0);
 		const added = sum((b) => b.added);
 		const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-		this.titleEl.setText(`Imported ${plural(added, 'highlight')}`);
+		const replaced = sum((b) => b.replaced);
+		const done = added || !replaced ? `imported ${plural(added, 'highlight')}${replaced ? `, rewrote ${replaced}` : ''}` : `rewrote ${plural(replaced, 'highlight')}`;
+		this.titleEl.setText(done[0].toUpperCase() + done.slice(1));
 		const notImported = this.options.notImported ?? [];
 		const outside: NotImported[] = [...missing.map((m) => ({ ...m, reason: 'Not in the vault' })), ...notImported];
 
-		const totals = { total: sum((b) => b.total), added, duplicates: sum((b) => b.duplicates), skipped: sum((b) => b.skipped), notFound: sum((b) => b.notFound.length) };
+		const totals = { total: sum((b) => b.total), added, replaced, duplicates: sum((b) => b.duplicates), skipped: sum((b) => b.skipped), notFound: sum((b) => b.notFound.length) };
 		const left = outside.reduce((n, o) => n + o.count, 0);
 		const parts = [added ? `${plural(added, 'highlight')} added to ${plural(books.filter((b) => b.added).length, noun)}` : 'Nothing new added'];
+		if (totals.replaced) parts.push(`${totals.replaced} rewritten in the current format`);
 		if (totals.duplicates) parts.push(`${totals.duplicates} already there`);
 		if (totals.skipped) parts.push(`${totals.skipped} of a kind turned off`);
 		if (totals.notFound) parts.push(`${totals.notFound} not found`);
@@ -310,6 +368,7 @@ export class ImportModal extends Modal {
 			[titleCase(noun), ''],
 			['In import', 'Highlights the import had for it'],
 			['Added', 'Inserted into its annotation file'],
+			['Replaced', 'Already in its annotation file at the same passage: rewritten in the current format'],
 			['Already there', 'The same passage and comment were already in your notes (or repeated in the import)'],
 			['Turned off', 'Of a kind (with / without comment) that is turned off'],
 			['Not found', `The passage isn't in the ${noun}`],
@@ -337,6 +396,7 @@ export class ImportModal extends Modal {
 			if (b.error) name.createDiv({ cls: 'fpp-import-errors', text: `Failed: ${b.error}` });
 			cell(tr, b.total, '');
 			cell(tr, b.added, 'is-added');
+			cell(tr, b.replaced, 'is-added');
 			cell(tr, b.duplicates, 'is-duplicate');
 			cell(tr, b.skipped, 'is-skipped');
 			const nf = cell(tr, b.notFound.length, 'is-missed');
@@ -368,11 +428,12 @@ export class ImportModal extends Modal {
 			tr.createEl('td', { text: 'Total' });
 			cell(tr, totals.total + left, '');
 			cell(tr, totals.added, 'is-added');
+			cell(tr, totals.replaced, 'is-added');
 			cell(tr, totals.duplicates, 'is-duplicate');
 			cell(tr, totals.skipped, 'is-skipped');
 			cell(tr, totals.notFound, 'is-missed');
 		}
 		new Setting(contentEl).addButton((b) => b.setButtonText('Close').setCta().onClick(() => this.close()));
-		new Notice(`${plugin.manifest.name}: imported ${plural(added, 'highlight')}`);
+		new Notice(`${plugin.manifest.name}: ${done}`);
 	}
 }

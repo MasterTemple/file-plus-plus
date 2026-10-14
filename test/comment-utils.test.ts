@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getComment, setComment } from '../src/annotator/comment-utils';
+import { getComment, replaceHighlight, setComment } from '../src/annotator/comment-utils';
 
 const L = (s: string) => s.split('\n');
 const J = (a: string[]) => a.join('\n');
@@ -68,4 +68,13 @@ after`);
 		expect(J(out)).toBe('before\n\n> [!quote|green] See [[B.epub#x|here]] now\n>\n> why\n\nafter');
 		expect(getComment(out, 2)).toBe('why');
 	});
+});
+
+test('replaceHighlight: the whole callout, comment included; not a link in text', () => {
+	const link = '[[B.epub#epubcfi(/6/4!/4/2,/1:0,/1:5)|B]]';
+	const data = `# H\n\n> [!quote|blue] ${link}\n> > old\n>\n> c\n\nafter`;
+	const at = data.indexOf(link);
+	expect(replaceHighlight(data, at, at + link.length, `> [!quote|red] ${link}\n> ==new== text\n`)).toBe(`# H\n\n> [!quote|red] ${link}\n> ==new== text\n\nafter`);
+	const plain = `see ${link} here`;
+	expect(replaceHighlight(plain, 4, 4 + link.length, 'x')).toBeNull();
 });

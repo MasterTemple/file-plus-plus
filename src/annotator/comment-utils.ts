@@ -137,3 +137,28 @@ export function removeHighlight(data: string, start: number, end: number): strin
 	}
 	return out.join('\n');
 }
+
+/**
+ * The callout of the highlight whose link is `data.slice(start, end)`, as a line range (inclusive), or
+ * null when the link isn't a callout/blockquote header (`> [!quote|c] link`).
+ */
+export function highlightBlock(data: string, start: number, end: number): { start: number; end: number; text: string } | null {
+	const lines = data.split('\n');
+	const lineNo = data.slice(0, start).split('\n').length - 1;
+	const col = start - (data.lastIndexOf('\n', start - 1) + 1);
+	const line = lines[lineNo];
+	const rest = line.slice(0, col) + line.slice(col + Math.min(end - start, line.length - col));
+	if (!QUOTE.test(line) || !CALLOUT_HEADER_REST.test(rest)) return null;
+	const l = commentLayout(lines, lineNo);
+	if (l.start !== lineNo) return null;
+	return { start: l.start, end: l.end, text: lines.slice(l.start, l.end + 1).join('\n') };
+}
+
+/** Replace the callout of the highlight whose link is `data.slice(start, end)` with `block` (null: not a callout). */
+export function replaceHighlight(data: string, start: number, end: number, block: string): string | null {
+	const b = highlightBlock(data, start, end);
+	if (!b) return null;
+	const lines = data.split('\n');
+	lines.splice(b.start, b.end - b.start + 1, ...block.replace(/\n+$/, '').split('\n'));
+	return lines.join('\n');
+}
