@@ -348,10 +348,10 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	}
 
 	/**
-	 * Jump to a subpath (`#<locator>&color=..`); range locators flash (per settings) unless `flash` is
-	 * false. With `record`, where the view was goes on its jump list.
+	 * Jump to a subpath (`#<locator>&color=..`); range locators flash (per settings, in `flashColor`
+	 * if given) unless `flash` is false. With `record`, where the view was goes on its jump list.
 	 */
-	navigate(subpath: string, flash = true, record = true): boolean {
+	navigate(subpath: string, flash = true, record = true, flashColor?: string): boolean {
 		if (!this.reader) {
 			this.pendingSubpath = subpath;
 			this.pendingFlash = flash;
@@ -361,7 +361,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		const loc = this.reader.parse(subpath);
 		if (!loc.locator) return false;
 		if (record) this.recordJump();
-		const ok = this.reader.goTo(loc.locator, { flash: flash && this.reader.isRangeLocator(loc.locator) && this.plugin.jumpFlash() });
+		const jump = this.plugin.jumpFlash();
+		const ok = this.reader.goTo(loc.locator, { flash: flash && this.reader.isRangeLocator(loc.locator) && jump && { ...jump, color: flashColor ?? jump.color } });
 		if (!ok) console.warn('[fpp] could not resolve', subpath);
 		else this.onNavigate(loc.locator);
 		return ok;

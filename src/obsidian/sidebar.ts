@@ -622,7 +622,8 @@ export class Sidebar {
 		if (e.updated) meta.createSpan({ cls: 'fpp-hl-time', text: timeAgo(e.updated), attr: { 'aria-label': `Updated ${e.updated.toLocaleString()}` } });
 		item.addEventListener('click', (ev) => {
 			if ((ev.target as HTMLElement).closest('a')) return; // links inside comments
-			this.view.navigate(e.locator);
+			// A highlight flashes in its own color
+			this.view.navigate(e.locator, true, true, (e.mention === undefined && this.view.reader?.highlightColor(e.id)) || undefined);
 			if (this.view.sidebarIsOverlay()) this.view.toggleSidebar(false, false);
 		});
 	}
