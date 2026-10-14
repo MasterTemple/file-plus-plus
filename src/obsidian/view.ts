@@ -267,8 +267,9 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			const saved = s.positions[file.path];
 			const target = pending ?? saved;
 			this.pendingSubpath = null;
-			// Opened by a link: the jump list starts where the document would have opened by itself
-			if (pending && this.pendingJump) this.recordJump(saved ? { path: file.path, locator: saved } : undefined);
+			// The jump list starts where the document opens; opened by a link, where it would have opened by itself
+			const start = pending && this.pendingJump ? saved : target;
+			this.recordJump(start ? { path: file.path, locator: start } : undefined);
 			if (target) this.navigate(target, !!pending && this.pendingFlash && target !== saved, false);
 		} catch (e) {
 			console.error('[fpp] failed to open', file.path, e);
