@@ -5,7 +5,7 @@ import { shareHotkeys } from './hotkeys';
 import { hoverLink } from './hover';
 import { resolveFile, type HighlightEntry } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
-import { COMMENT_TEMPLATE, CONTEXT_FORMAT, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type LinkPlace, type OpenTarget } from './settings';
+import { COMMENT_TEMPLATE, CONTEXT_FORMAT, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type LinkPlace, type OpenTarget, type PaletteColor } from './settings';
 import { Annotator } from '../annotator/annotator';
 import { DocumentEmbed, registerEmbeds, type EmbedContext } from './embed';
 import { FppSettingTab } from './setting-tab';
@@ -820,6 +820,26 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return true;
 				},
 			});
+		// No default hotkeys: bound to bare digits by whoever wants them. Off while typing (the
+		// sidebar's search, a comment), so the key then types; shareHotkeys passes it on.
+		const typing = () => {
+			const el = activeDocument.activeElement as HTMLElement | null;
+			return !!el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+		};
+		const colorCommand = (id: string, title: string, pick: () => PaletteColor | null | undefined) =>
+			this.addCommand({
+				id,
+				name: title,
+				checkCallback: (checking) => {
+					const v = this.activeView();
+					const color = pick();
+					if (!v?.reader || color === undefined || typing()) return false;
+					if (!checking) v.setActiveColor(color?.name ?? null);
+					return true;
+				},
+			});
+		for (let i = 1; i <= 9; i++) colorCommand(`color-${i}`, `Use highlight color ${i} (palette order)`, () => this.settings.palette[i - 1]);
+		colorCommand('color-none', 'Use no highlight color', () => null);
 		this.addCommand({ id: 'appearance', name: 'Reading appearance', checkCallback: withView((v) => v.toggleAppearance()) });
 		this.addCommand({ id: 'font-increase', name: 'Increase font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.min(48, this.readerSettings(v.file?.path).fontSize + 1) })) });
 		this.addCommand({ id: 'font-decrease', name: 'Decrease font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.max(8, this.readerSettings(v.file?.path).fontSize - 1) })) });

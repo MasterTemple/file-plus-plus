@@ -110,9 +110,11 @@ if (key) {
 	const parts = key.toLowerCase().split('+');
 	const k = parts.pop()!;
 	const modifiers = (parts.includes('alt') ? 1 : 0) | (parts.includes('ctrl') ? 2 : 0) | (parts.includes('meta') ? 4 : 0) | (parts.includes('shift') ? 8 : 0);
-	const base = { modifiers, key: k, code: `Key${k.toUpperCase()}`, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0) };
+	const base = { modifiers, key: k, code: /^\d$/.test(k) ? `Digit${k}` : `Key${k.toUpperCase()}`, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0) };
 	const commands = modifiers === 2 && k === 'c' ? ['copy'] : [];
-	await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base, commands });
+	// A printable key without Ctrl/Alt/Meta types its character (if nothing handles the keydown)
+	const text = k.length === 1 && !(modifiers & 7) ? { text: modifiers & 8 ? k.toUpperCase() : k } : {};
+	await send('Input.dispatchKeyEvent', { type: text.text ? 'keyDown' : 'rawKeyDown', ...base, ...text, commands });
 	await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
 }
 await Bun.sleep(400);
