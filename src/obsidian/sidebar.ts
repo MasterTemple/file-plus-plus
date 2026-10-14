@@ -21,6 +21,8 @@ export class Sidebar {
 	private resultsEl!: HTMLElement;
 	private results: SearchResult[] = [];
 	private current = -1;
+	/** Escape took the results out of the text (`hideResults`); n / N bring them back. */
+	private resultsHidden = false;
 	private opts = { caseSensitive: false, wholeWord: false, regex: false };
 	private highlightsEl: HTMLElement;
 	private header: HTMLElement;
@@ -127,7 +129,10 @@ export class Sidebar {
 		if (id !== 'search') this.view.reader?.showSearchResults([]);
 		else {
 			if (this.searchInput && this.searchInput.value !== this.lastQuery) this.runSearch();
-			else if (this.results.length) this.view.reader?.showSearchResults(this.results, -1);
+			else if (this.results.length) {
+				this.resultsHidden = false;
+				this.view.reader?.showSearchResults(this.results, -1);
+			}
 			this.warmIndex();
 		}
 	}
@@ -225,6 +230,17 @@ export class Sidebar {
 		const n = this.results.length;
 		this.select(this.current === -1 ? (delta > 0 ? 0 : n - 1) : (this.current + delta + n) % n);
 		return true;
+	}
+
+	/** Whether search results are drawn in the text. */
+	resultsDrawn(): boolean {
+		return this.results.length > 0 && !this.resultsHidden && this.activeTab === 'search';
+	}
+
+	/** Take the search results out of the text (they stay in the list). */
+	hideResults(): void {
+		this.resultsHidden = true;
+		this.view.reader?.showSearchResults([]);
 	}
 
 	/** In the results' key mode: the next / previous result (wrapping), or with ±Infinity the first / last one. */
@@ -380,6 +396,7 @@ export class Sidebar {
 		this.lastQuery = q;
 		this.resultsEl.empty();
 		this.current = -1;
+		this.resultsHidden = false;
 		if (!reader || !q.trim()) {
 			this.results = [];
 			this.view.setSearchNavVisible(false);
@@ -432,6 +449,7 @@ export class Sidebar {
 	private select(i: number, fromClick = false): void {
 		if (fromClick) this.view.recordJump();
 		this.current = i;
+		this.resultsHidden = false;
 		this.view.reader?.showSearchResults(this.results, i);
 		this.searchInfo.setText(`${i + 1} / ${this.results.length}`);
 		if (i >= this.renderedCount) this.renderMoreResults(i - this.renderedCount + 50);

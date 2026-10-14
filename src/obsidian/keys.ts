@@ -140,12 +140,15 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		actions[action](v);
 	};
 
-	/** Keys of the outline and the results that aren't bindings: arrows, h / l, Enter, Escape. */
+	/** Keys of the outline and the results that aren't bindings: arrows, h / l, Enter, Escape; Escape in the text. */
 	const modeKey = (v: DocumentView, chord: string): (() => void) | null => {
 		const sidebar = v.sidebar;
 		const mode = sidebar.keysMode();
 		if (mode && !v.sidebarTabShown(mode === 'toc' ? 'toc' : 'search')) sidebar.setKeyMode(null);
-		else if (mode === 'toc') {
+		else if (!mode) {
+			// In the text: the search results stop being drawn (n / N show them again)
+			if (chord === 'Escape' && sidebar.resultsDrawn()) return () => sidebar.hideResults();
+		} else if (mode === 'toc') {
 			if (chord === 'ArrowDown' || chord === 'ArrowUp') return () => sidebar.moveTocCursor(chord === 'ArrowDown' ? 1 : -1);
 			if (chord === 'h' || chord === 'ArrowLeft') return () => sidebar.foldTocCursor(false);
 			if (chord === 'l' || chord === 'ArrowRight') return () => sidebar.foldTocCursor(true);
