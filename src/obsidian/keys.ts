@@ -5,6 +5,7 @@ import type { ReaderKeyAction } from './settings';
 import { chordOf, parseBinding, SequenceMatcher } from './key-sequence';
 import type { Place } from './jump-list';
 import { KeyScroller } from './key-scroll';
+import { endSentenceHints, sentenceHintKey, sentenceHintsShown } from './sentence-hints';
 
 /** Whether the focus is where a key types (an input, a comment, the editor), so reader keys leave it alone. */
 export function typing(): boolean {
@@ -57,7 +58,10 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 			v.toggleSidebar();
 		},
 		'open-file': () => command('open-file'),
+		'hint-highlight': () => command('highlight-sentence'),
+		'hint-comment': () => command('comment-on-sentence'),
 		comments: () => command('toggle-margin-comments'),
+		highlights: () => command('toggle-highlights'),
 		'next-highlight': () => command('next-highlight'),
 		'prev-highlight': () => command('previous-highlight'),
 		'next-comment': () => command('next-comment'),
@@ -123,6 +127,7 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 	const matcher = new SequenceMatcher();
 	let timer: number | undefined;
 	const clearPending = () => {
+		endSentenceHints();
 		window.clearTimeout(timer);
 		matcher.reset();
 		awaiting = null;
@@ -168,9 +173,14 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 	/** false: the key was used (Obsidian then stops it); undefined: it goes on to the hotkeys. */
 	const handle = (e: KeyboardEvent): false | void => {
 		const s = plugin.settings;
-		if (!s.numberKeyColors && !s.readerKeysEnabled) return;
 		const chord = chordOf(e);
 		if (!chord) return; // a modifier on its own: a sequence goes on
+		// Sentence labels shown (also when picked from a command): keys type a label
+		if (sentenceHintsShown() && !typing()) {
+			sentenceHintKey(chord);
+			return false;
+		}
+		if (!s.numberKeyColors && !s.readerKeysEnabled) return;
 		repeat = e.repeat;
 		const v = plugin.activeView();
 		if (!v?.reader || typing() || activeDocument.querySelector('body > .modal-container, body > .menu, body > .suggestion-container')) return clearPending();

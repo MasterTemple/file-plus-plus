@@ -109,6 +109,20 @@ export function sentenceRange(block: Element, node: Node, offset: number, lang?:
 	if (!bounds.length) return null;
 	// The last sentence starting at or before the position (spaces after one belong to it)
 	const [a, b] = [...bounds].reverse().find(([start]) => start <= at) ?? bounds[0];
+	return textRange(block, texts, starts, a, b);
+}
+
+/** Every sentence of `block`, in order */
+export function sentenceRanges(block: Element, lang?: string): Range[] {
+	const { texts, starts, text, notes } = blockText(block);
+	if (!texts.length) return [];
+	return sentenceBounds(text, lang, notes)
+		.filter(([a, b]) => b > a)
+		.map(([a, b]) => textRange(block, texts, starts, a, b));
+}
+
+/** The range [a, b) of a block's text (its `texts`, starting at `starts`) */
+function textRange(block: Element, texts: Text[], starts: number[], a: number, b: number): Range {
 	const point = (pos: number, end: boolean): [Text, number] => {
 		for (let i = 0; i < texts.length; i++) {
 			const len = texts[i].data.length;

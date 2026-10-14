@@ -18,6 +18,7 @@ src/core/       no Obsidian imports
   margin.ts     Margin (`reader.margin`): notes beside the text, Google Docs style — light-DOM elements slotted into a column in the scroller, stacked without overlap; moves the text left, hides itself when too narrow
   lines.ts      line/column locators (L12C5-L14C3) for line-based formats
   sentences.ts  sentence bounds (Intl.Segmenter) and ranges: a triple click selects the sentence, a fourth the paragraph (`reader.multiClickRange`, overridable: verses)
+  hints.ts      labels over things in view that keys pick (`hintLabels`, `HintOverlay`); `reader.visibleSentences()` gives the sentences
   text-index.ts, search.ts, text-fragment.ts, markdown.ts (range → Markdown), settings.ts (themes, base CSS)
 src/obsidian/    the viewer (`file-plus-plus/viewer`): knows nothing of notes
   format.ts     FileFormat: everything a plugin tells the library about its format
@@ -27,6 +28,7 @@ src/obsidian/    the viewer (`file-plus-plus/viewer`): knows nothing of notes
   embed.ts      DocumentEmbed (subclassable) for ![[file#…]] and hover previews
   player.ts     MediaPlayer (a URL, our own controls; container query: one row wide, two rows narrow; clips stop just inside their end) and PlaybackFollower (keeps what plays in view, not just after scrolling by hand): Transcript++ and the Topos Bible plugin; styles under `.fpp-player-ui`
   api.ts        FileApi, annotation providers (`preview`, `extractText`), `file-plus-plus:api-ready`
+  sentence-hints.ts  picking a sentence in view by its label (`h` / `c`, the annotator's *Highlight / Comment on a sentence* commands); keys.ts hands it keys first
   sidebar.ts, setting-tab.ts, appearance.ts, annotation-tip.ts, link-utils.ts (link syntax, shared)
   patch.ts      around(): method patching that tolerates other plugins patching the same method
   viewer.ts / index.ts  exports: the viewer / everything (`file-plus-plus/obsidian`)

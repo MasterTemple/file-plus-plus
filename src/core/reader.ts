@@ -5,9 +5,10 @@ import { searchIndex, type SearchMatch, type SearchOptions } from './search';
 import { TextIndex } from './text-index';
 import { Emitter } from './emitter';
 import { rangeToMarkdown } from './markdown';
-import { blockText, sentenceBounds, sentenceEndAt, sentenceRange, sentenceStartAt } from './sentences';
+import { blockText, sentenceBounds, sentenceEndAt, sentenceRange, sentenceRanges, sentenceStartAt } from './sentences';
 import { BASE_CSS, DEFAULT_SETTINGS, settingsToVars, type ReaderSettings } from './settings';
 import { Margin } from './margin';
+import { HINT_CSS } from './hints';
 
 /** Strength of highlights dimmed while others are focused. */
 const DIMMED = 0.3;
@@ -234,7 +235,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		this.shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
 		this.shadow.replaceChildren();
 		const base = this.doc.createElement('style');
-		base.textContent = BASE_CSS + this.extraCss();
+		base.textContent = BASE_CSS + HINT_CSS + this.extraCss();
 		this.highlightStyle = this.doc.createElement('style');
 		this.scroller = this.doc.createElement('div');
 		this.scroller.className = 'fpp-scroller';
@@ -671,7 +672,16 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		// would land on the last section: there's no position to read
 		if (!this.scroller.isConnected || !this.scroller.clientHeight) return null;
 		// Probe just below the 16px gap that scrollToRange(position: 'top') leaves, so restores are stable.
-		const top = this.scroller.getBoundingClientRect().top + 18;
+		const at = this.elementAt(this.scroller.getBoundingClientRect().top + 18);
+		const range = this.doc.createRange();
+		if (at.found) range.setStartBefore(at.found);
+		else range.setStart(at.section.body, 0);
+		range.collapse(true);
+		return range;
+	}
+
+	/** The section at a viewport height `top`, and the first block there (as deep as it's still a block, not a page-tall wrapper) */
+	private elementAt(top: number): { section: RenderedSection; found: Element | null } {
 		// First section extending below the top edge (sections are separated by margins).
 		let sec = this.sections[this.sections.length - 1];
 		let lo = 0;
@@ -701,11 +711,35 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			if (r.top >= top - 2 || r.height < this.scroller.clientHeight / 2) break;
 			parent = k;
 		}
-		const range = this.doc.createRange();
-		if (found) range.setStartBefore(found);
-		else range.setStart(sec.body, 0);
-		range.collapse(true);
-		return range;
+		return { section: sec, found };
+	}
+
+	/**
+	 * The sentences in view, top to bottom, each with where its first line in view starts (viewport
+	 * coordinates): what keys can pick (`HintOverlay`).
+	 */
+	visibleSentences(): { range: Range; x: number; y: number }[] {
+		if (!this.sections.length || !this.scroller.isConnected || !this.scroller.clientHeight) return [];
+		const view = this.scroller.getBoundingClientRect();
+		const { section, found } = this.elementAt(view.top);
+		const out: { range: Range; x: number; y: number }[] = [];
+		const done = new Set<Element>();
+		const walker = this.doc.createTreeWalker(this.content, NodeFilter.SHOW_TEXT);
+		walker.currentNode = found ?? section.body;
+		for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
+			if (!n.data.trim() || n.parentElement?.closest('script, style, rt, rp')) continue;
+			const block = this.blockOf(n);
+			if (!block || done.has(block)) continue;
+			done.add(block);
+			const r = block.getBoundingClientRect();
+			if (r.top >= view.bottom) break;
+			if (r.bottom <= view.top || !r.height) continue;
+			for (const range of sentenceRanges(block, langOf(block))) {
+				const line = Array.from(range.getClientRects()).find((q) => q.width > 0 && q.height > 0 && q.bottom > view.top + 2 && q.top < view.bottom - 2);
+				if (line) out.push({ range, x: line.left, y: line.top });
+			}
+		}
+		return out;
 	}
 
 	// ---------------------------------------------------------------------------------------------

@@ -24,5 +24,6 @@ export {
 } from './reader';
 export * from './settings';
 export { highlightInContext, rangeToMarkdown } from './markdown';
-export { sentenceBounds, sentenceContext, sentenceEndAt, sentenceRange, sentenceStartAt } from './sentences';
+export { sentenceBounds, sentenceContext, sentenceEndAt, sentenceRange, sentenceRanges, sentenceStartAt } from './sentences';
+export { hintLabels, HintOverlay, type Hint } from './hints';
 export { Margin, type MarginNote, type MarginOptions } from './margin';

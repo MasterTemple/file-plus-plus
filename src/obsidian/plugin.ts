@@ -329,6 +329,8 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		// v5 added the highlight-in-context format; offer it to existing setups once.
 		if (version < 5 && data.copyFormats && !this.settings.copyFormats.some((f) => f.template.includes('{{context}}')))
 			this.settings.copyFormats.push({ ...CONTEXT_FORMAT });
+		// v6: c labels sentences to comment on; toggling comments moved to g c
+		if (version < 6 && this.settings.readerKeys.comments === 'c') this.settings.readerKeys.comments = 'g c';
 		// v4: link types are the format's own (`primary`) or text fragments.
 		if (this.settings.linkType !== 'text') this.settings.linkType = 'primary';
 		this.settings.settingsVersion = DEFAULT_SETTINGS.settingsVersion;

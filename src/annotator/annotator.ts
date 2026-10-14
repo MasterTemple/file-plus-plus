@@ -11,6 +11,7 @@ import { askForComment, confirmDeleteHighlight } from './comment-modal';
 import { getComment, removeHighlight, setComment } from './comment-utils';
 import { HighlightIndex, type HighlightEntry } from './highlight-index';
 import { ImportModal } from './import';
+import { pickSentence } from '../obsidian/sentence-hints';
 
 /**
  * The note-taking layer over the viewer: links from notes into a document are its highlights (the
@@ -116,6 +117,21 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 					return true;
 				},
 			});
+		// Labels on the sentences in view; typing one copies its sentence as the hint format (in the current color)
+		for (const [id, name, comment] of [
+			['highlight-sentence', 'Highlight a sentence in view (by its label)', false],
+			['comment-on-sentence', 'Comment on a sentence in view (by its label)', true],
+		] as const)
+			this.plugin.addCommand({
+				id,
+				name,
+				checkCallback: (checking) => {
+					const v = this.plugin.activeView();
+					if (!v?.reader) return false;
+					if (!checking) this.pickSentence(v, comment);
+					return true;
+				},
+			});
 		const copyCommand = (id: string, title: string, target: () => CopyTarget | null) =>
 			this.plugin.addCommand({
 				id,
@@ -143,6 +159,31 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			}
 		};
 		this.syncFormatCommands();
+	}
+
+	/** Label the sentences in view; the one picked is copied (and inserted) as the hint format, or the comment one. */
+	pickSentence(view: DocumentView<Doc, R>, comment: boolean): void {
+		const s = this.plugin.settings;
+		const formats = s.copyFormats;
+		const what = comment
+			? (this.resolveCopyAction(s.hintCommentFormat) ?? formats.find((f) => needsComment(f.template)) ?? { id: '', name: 'Callout with comment', template: COMMENT_TEMPLATE })
+			: (this.resolveCopyAction(s.hintFormat) ?? formats.find((f) => !needsComment(f.template)) ?? 'link');
+		const color = view.activeColor;
+		const css = (color && s.palette.find((p) => p.name === color)?.color) || '#d4d4d4';
+		const shown = pickSentence(view as unknown as DocumentView, s.hintKeys, css, async (range) => {
+			const reader = view.reader;
+			const info = reader?.describeRange(range);
+			if (!reader || !info) return;
+			// What the comment is about, while it's asked for
+			reader.setPendingSelection(range);
+			try {
+				await this.copy(view, info, what, color);
+			} finally {
+				reader.setPendingSelection(null);
+			}
+			reader.flash(range, { color: css });
+		});
+		if (!shown) this.plugin.notice(s.hintKeys.trim() ? 'no sentences in view.' : 'no keys to label sentences with (Settings → keys).');
 	}
 
 	/** Re-register the per-format copy commands (after formats are added, renamed or removed). Hotkeys are kept by id. */

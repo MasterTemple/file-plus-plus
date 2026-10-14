@@ -51,7 +51,10 @@ export const READER_KEY_ACTIONS = [
 	{ id: 'outline', key: 'Tab', name: 'Outline', desc: 'Moves into the contents: the scroll keys (or arrows) move, h / l collapse and expand, Enter goes there. Again (or Escape) goes back to the text.' },
 	{ id: 'sidebar', key: '\\', name: 'Toggle the sidebar', desc: 'Contents, search and highlights.' },
 	{ id: 'open-file', key: 'e', name: 'Open another document', desc: 'As the command (a file picker for this format only).' },
-	{ id: 'comments', key: 'c', name: 'Toggle comments in the margin' },
+	{ id: 'hint-highlight', key: 'h', name: 'Highlight a sentence', desc: 'Labels the sentences in view; type a label to highlight its sentence in the current color, with the copy format chosen below. Escape: never mind.' },
+	{ id: 'hint-comment', key: 'c', name: 'Comment on a sentence', desc: 'Likewise, with the copy format for comments.' },
+	{ id: 'comments', key: 'g c', name: 'Toggle comments in the margin' },
+	{ id: 'highlights', key: 'g h', name: 'Toggle highlights' },
 ] as const;
 export type ReaderKeyAction = (typeof READER_KEY_ACTIONS)[number]['id'];
 
@@ -111,6 +114,12 @@ export interface FppSettings {
 	readerKeysEnabled: boolean;
 	/** Each reader key action's binding (see key-sequence.ts: `j`, `Ctrl+d`, `g g`); '' = off. */
 	readerKeys: Record<ReaderKeyAction, string>;
+	/** The keys sentence labels (`hint-highlight`) are made of, the best first. */
+	hintKeys: string;
+	/** What picking a sentence by its label does: a copy format (inserted into the annotation file, per its mode). */
+	hintFormat: CopyAction;
+	/** …and with a comment (`hint-comment`). */
+	hintCommentFormat: CopyAction;
 	/** Color picked last in a menu or the palette (null = no color); undefined until first pick. */
 	lastColor?: string | null;
 	/** Include `&color=` in copied links. */
@@ -245,6 +254,9 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	numberKeyColors: false,
 	readerKeysEnabled: false,
 	readerKeys: Object.fromEntries(READER_KEY_ACTIONS.map((a) => [a.id, a.key])) as Record<ReaderKeyAction, string>,
+	hintKeys: 'asdfjklghqweruio',
+	hintFormat: 'format:callout',
+	hintCommentFormat: 'format:callout-comment',
 	colorInLinks: true,
 	timestampInLinks: true,
 	marginComments: true,
@@ -271,7 +283,7 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	highlightHold: 'menu',
 	selectionMenu: [],
 	highlightMenu: [],
-	settingsVersion: 5,
+	settingsVersion: 6,
 	copyAction: 'text',
 	saveAnnotationAs: 'format:callout',
 	hiddenProviders: [],

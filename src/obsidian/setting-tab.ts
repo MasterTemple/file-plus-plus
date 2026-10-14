@@ -4,7 +4,7 @@ import { buildAppearanceControls, globalAppearance } from './appearance';
 import { chordOf, parseBinding } from './key-sequence';
 import type { FilePlusPlusPlugin } from './plugin';
 import { card, md, section, Tabs, type Section, type TabSpec } from './settings-kit';
-import { titleCase, READER_KEY_ACTIONS, HIGHLIGHT_GESTURE_LABELS, HIGHLIGHT_MENU_LABELS, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, ORIENTATION_LABELS, type HighlightGestureAction, type Orientation, needsComment, newFormatId, syncMenus, type AnnotationMode, type CopyAction, type LinkStyle, type LinkPlace, type LinkType, type OpenTarget } from './settings';
+import { DEFAULT_SETTINGS, titleCase, READER_KEY_ACTIONS, HIGHLIGHT_GESTURE_LABELS, HIGHLIGHT_MENU_LABELS, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, ORIENTATION_LABELS, type HighlightGestureAction, type Orientation, needsComment, newFormatId, syncMenus, type AnnotationMode, type CopyAction, type LinkStyle, type LinkPlace, type LinkType, type OpenTarget } from './settings';
 
 type TabId = 'own' | 'reading' | 'links' | 'highlights' | 'annotations' | 'menus';
 
@@ -369,6 +369,37 @@ export class FppSettingTab extends PluginSettingTab {
 			row.settingEl.toggle(s.readerKeysEnabled);
 			return row;
 		});
+		new Setting(keys.items)
+			.setName('Sentence labels')
+			.setDesc(
+				md(
+					`The keys that label the sentences in view (\`h\` / \`c\` above, or the commands *${manifest.name}: Highlight a sentence in view* and *Comment on a sentence in view*), the best first. One key each while they fit, else two.`,
+				),
+			)
+			.addText((t) =>
+				t
+					.setPlaceholder(DEFAULT_SETTINGS.hintKeys)
+					.setValue(s.hintKeys)
+					.onChange(async (v) => {
+						s.hintKeys = v.replace(/\s/g, '') || DEFAULT_SETTINGS.hintKeys;
+						await save();
+					}),
+			);
+		const hintFormat = (name: string, desc: string, key: 'hintFormat' | 'hintCommentFormat') =>
+			new Setting(keys.items)
+				.setName(name)
+				.setDesc(desc)
+				.addDropdown((d) => {
+					d.addOption('link', 'Link');
+					d.addOption('alt-link', s.linkType === 'primary' ? 'Text-fragment link' : `${format.linkTypeName} link`);
+					for (const f of s.copyFormats) d.addOption(`format:${f.id}`, f.name);
+					d.setValue(this.plugin.annotator.resolveCopyAction(s[key]) ? s[key] : DEFAULT_SETTINGS[key]).onChange(async (v) => {
+						s[key] = v as CopyAction;
+						await save();
+					});
+				});
+		hintFormat('Highlighting a sentence copies', `As the copy format's command, in the current color: into the ${noun}'s annotation file, per its mode.`, 'hintFormat');
+		hintFormat('Commenting on a sentence copies', 'Likewise; a format with {{comment}} asks for the comment.', 'hintCommentFormat');
 
 		// ─── Links ─────────────────────────────────────────────────────────────
 
