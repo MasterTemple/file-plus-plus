@@ -410,6 +410,20 @@ export class FppSettingTab extends PluginSettingTab {
 						await save();
 					}),
 			);
+		for (const [key, name, desc] of [
+			['hintStartPunctuation', 'Starting at a sentence\'s first word includes the punctuation before it', 'An opening quote or bracket.'],
+			['hintEndPunctuation', 'Ending at a sentence\'s last word includes the punctuation after it', 'The period, a closing quote or bracket.'],
+		] as const)
+			new Setting(keys.items)
+				.setName(name)
+				.setDesc(desc)
+				.setClass('fpp-subsetting')
+				.addToggle((t) =>
+					t.setValue(s[key]).onChange(async (v) => {
+						s[key] = v;
+						await save();
+					}),
+				);
 		hintFormat('Highlighting a sentence copies', `As the copy format's command, in the current color: into the ${noun}'s annotation file, per its mode.`, 'hintFormat');
 		hintFormat('Commenting on a sentence copies', 'Likewise; a format with {{comment}} asks for the comment.', 'hintCommentFormat');
 

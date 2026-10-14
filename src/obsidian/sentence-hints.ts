@@ -1,4 +1,4 @@
-import { HintOverlay, hintLabels, type Hint } from '../core';
+import { HintOverlay, hintLabels, wordRanges, type Hint } from '../core';
 import type { WordHintFlow } from './settings';
 import type { DocumentView } from './view';
 
@@ -18,6 +18,13 @@ interface Session {
 let session: Session | null = null;
 
 type Spot = { range: Range; x: number; y: number };
+
+/** How `pickWords` picks: the flow, and whether a passage from a sentence's first word (to its last) takes the punctuation before (after) it */
+export interface WordPickOptions {
+	flow: WordHintFlow;
+	startPunctuation: boolean;
+	endPunctuation: boolean;
+}
 
 /**
  * Labels `spots` of `view` with keys of `alphabet` (in `color`); typing a label calls `onPick` with its
@@ -57,7 +64,8 @@ export function pickSentence(view: DocumentView, alphabet: string, color: string
  * ends in, its last word (`flow` `sentence`), or the two words among every word in view (`word`).
  * What's picked so far is shown as selected. False: nothing in view.
  */
-export function pickWords(view: DocumentView, alphabet: string, color: string, flow: WordHintFlow, onPick: (range: Range) => void): boolean {
+export function pickWords(view: DocumentView, alphabet: string, color: string, opts: WordPickOptions, onPick: (range: Range) => void): boolean {
+	const { flow } = opts;
 	const reader = view.reader;
 	if (!reader) return false;
 	const show = (range: Range | null) => reader.setPendingSelection(range);
@@ -72,7 +80,16 @@ export function pickWords(view: DocumentView, alphabet: string, color: string, f
 	};
 	/** Whether `r` ends after `start` begins (the passage can end there) */
 	const after = (start: Range) => (r: Range) => r.comparePoint(start.startContainer, start.startOffset) <= 0;
-	const finish = (range: Range) => {
+	/** The sentence in view a word is in */
+	const sentenceOf = (word: Range) => reader.visibleSentences().find((s) => s.range.comparePoint(word.startContainer, word.startOffset) === 0)?.range;
+	const same = (a: Node, i: number, b: Node, j: number) => a === b && i === j;
+	/** From `start` to `end`, with the punctuation before a sentence's first word and after its last, as chosen */
+	const finish = (start: Range, end: Range, first = sentenceOf(start), last = sentenceOf(end)) => {
+		const range = span(start, end);
+		const firstWord = first && wordRanges(first)[0];
+		if (opts.startPunctuation && first && firstWord && same(firstWord.startContainer, firstWord.startOffset, start.startContainer, start.startOffset)) range.setStart(first.startContainer, first.startOffset);
+		const lastWord = last && wordRanges(last).pop();
+		if (opts.endPunctuation && last && lastWord && same(lastWord.endContainer, lastWord.endOffset, end.endContainer, end.endOffset)) range.setEnd(last.endContainer, last.endOffset);
 		show(null);
 		onPick(range);
 	};
@@ -90,7 +107,7 @@ export function pickWords(view: DocumentView, alphabet: string, color: string, f
 	if (flow === 'word')
 		return startWord(reader.visibleWords(), (start) => {
 			show(start);
-			endAt(start, reader.visibleWords(), (end) => finish(span(start, end)));
+			endAt(start, reader.visibleWords(), (end) => finish(start, end));
 		});
 	return pick(reader.visibleSentences(), (first) => {
 		show(first);
@@ -98,7 +115,7 @@ export function pickWords(view: DocumentView, alphabet: string, color: string, f
 			show(start);
 			endAt(start, reader.visibleSentences(), (last) => {
 				show(span(start, last));
-				endAt(start, reader.visibleWords(last), (end) => finish(span(start, end)));
+				endAt(start, reader.visibleWords(last), (end) => finish(start, end, first, last));
 			});
 		});
 		// No words in it (only punctuation)

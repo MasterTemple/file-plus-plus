@@ -127,6 +127,10 @@ export interface FppSettings {
 	hintCommentFormat: CopyAction;
 	/** Picking a passage word by word (`hint-words-highlight`): through its sentences first, or among every word in view. */
 	wordHintFlow: WordHintFlow;
+	/** A passage picked word to word from a sentence's first word starts with what's before it (an opening quote, a bracket)… */
+	hintStartPunctuation: boolean;
+	/** …and one ending at a sentence's last word ends with what's after it (the period, a closing quote). */
+	hintEndPunctuation: boolean;
 	/** Color picked last in a menu or the palette (null = no color); undefined until first pick. */
 	lastColor?: string | null;
 	/** Include `&color=` in copied links. */
@@ -265,6 +269,8 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	hintFormat: 'format:callout',
 	hintCommentFormat: 'format:callout-comment',
 	wordHintFlow: 'sentence',
+	hintStartPunctuation: true,
+	hintEndPunctuation: true,
 	colorInLinks: true,
 	timestampInLinks: true,
 	marginComments: true,

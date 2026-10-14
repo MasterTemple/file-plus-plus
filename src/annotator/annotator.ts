@@ -175,7 +175,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			: (this.resolveCopyAction(s.hintFormat) ?? formats.find((f) => !needsComment(f.template)) ?? 'link');
 		const color = view.activeColor;
 		const css = (color && s.palette.find((p) => p.name === color)?.color) || '#d4d4d4';
-		const shown = (words ? (v: DocumentView, keys: string, c: string, f: (r: Range) => void) => pickWords(v, keys, c, s.wordHintFlow, f) : pickSentence)(view as unknown as DocumentView, s.hintKeys, css, async (range) => {
+		const shown = (words ? (v: DocumentView, keys: string, c: string, f: (r: Range) => void) => pickWords(v, keys, c, { flow: s.wordHintFlow, startPunctuation: s.hintStartPunctuation, endPunctuation: s.hintEndPunctuation }, f) : pickSentence)(view as unknown as DocumentView, s.hintKeys, css, async (range) => {
 			const reader = view.reader;
 			const info = reader?.describeRange(range);
 			if (!reader || !info) return;
