@@ -1,6 +1,8 @@
+import { Platform } from 'obsidian';
 import type { FilePlusPlusPlugin } from './plugin';
 import type { DocumentView } from './view';
 import type { ReaderKeyAction } from './settings';
+import { chordOf, parseBinding, SequenceMatcher } from './key-sequence';
 
 /** Whether the focus is where a key types (an input, a comment, the editor), so reader keys leave it alone. */
 export function typing(): boolean {
@@ -8,25 +10,18 @@ export function typing(): boolean {
 	return !!el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
 }
 
-/**
- * A key as `readerKeys` names it: a character as typed (`j`, `J`, `/`), or a named key (`Tab`,
- * `Shift+Tab`, `ArrowDown`). Null with Ctrl/Cmd/Alt: those are Obsidian's hotkeys.
- */
-export function keyName(e: KeyboardEvent): string | null {
-	if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return null;
-	if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Dead', 'Unidentified', 'Process'].includes(e.key)) return null;
-	if (e.key === ' ') return 'Space';
-	return e.key.length === 1 || !e.shiftKey ? e.key : `Shift+${e.key}`;
-}
+/** How long a binding of several keys (`g g`) waits for its next key, as Vim's `timeoutlen`. */
+const SEQUENCE_TIMEOUT = 1000;
 
-/** How a key name shows in the settings. */
-export function keyLabel(key: string): string {
-	return key === '' ? 'Off' : key === ' ' ? 'Space' : key;
+interface ScopeKey {
+	func: (evt: KeyboardEvent) => false | void;
 }
 
 /**
- * Keys without modifiers in a focused document (Obsidian's hotkeys can't be bare keys): the number
- * keys pick a color, and the vim-like `readerKeys`. Never while typing, or while a menu or modal is open.
+ * Reader keys in a focused document: the number keys pick a color, and `readerKeys` (vim-like, may
+ * have modifiers or be several keys long, `g g`). Never while typing, or while a menu or modal is
+ * open. They are looked at first in Obsidian's root key scope, ahead of its hotkeys (so `Ctrl+d`
+ * can be one), and keys they don't use go on to the hotkeys.
  */
 export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 	const actions: Record<ReaderKeyAction, (v: DocumentView) => void> = {
@@ -34,6 +29,8 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'scroll-up': (v) => scroll(v, -0.15),
 		'page-down': (v) => scroll(v, 0.5),
 		'page-up': (v) => scroll(v, -0.5),
+		top: (v) => v.reader!.scroller.scrollTo({ top: 0, behavior: 'smooth' }),
+		bottom: (v) => v.reader!.scroller.scrollTo({ top: v.reader!.scroller.scrollHeight, behavior: 'smooth' }),
 		search: (v) => {
 			v.sidebar.setKeyMode(null);
 			v.openSearch();
@@ -56,50 +53,105 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		const el = v.reader!.scroller;
 		el.scrollBy({ top: Math.round(el.clientHeight * screens), behavior: 'smooth' });
 	};
-	const handle = (e: KeyboardEvent) => {
-		const s = plugin.settings;
-		if (!s.numberKeyColors && !s.readerKeysEnabled) return;
-		const key = keyName(e);
-		const v = plugin.activeView();
-		if (!v?.reader || activeDocument.querySelector('body > .modal-container, body > .menu, body > .suggestion-container')) return;
-		const run = (fn: () => void) => {
-			e.preventDefault();
-			e.stopPropagation();
-			fn();
-		};
-		const sidebar = v.sidebar;
-		if (!key || typing()) return;
-		if (s.numberKeyColors && /^\d$/.test(key)) {
-			const n = Number(key);
-			const color = n === 0 ? null : s.palette[n - 1];
-			if (color !== undefined) run(() => v.setActiveColor(color?.name ?? null));
-			return;
+
+	// The bindings, parsed again when the settings change (one that doesn't parse is off)
+	let parsedFrom = '';
+	let bindings = new Map<ReaderKeyAction, string[]>();
+	const currentBindings = () => {
+		const text = JSON.stringify(plugin.settings.readerKeys);
+		if (text !== parsedFrom) {
+			parsedFrom = text;
+			bindings = new Map((Object.entries(plugin.settings.readerKeys) as [ReaderKeyAction, string][]).map(([id, k]) => [id, parseBinding(k, Platform.isMacOS) ?? []]));
 		}
-		if (!s.readerKeysEnabled) return;
-		const bound = (id: ReaderKeyAction) => s.readerKeys[id] === key;
-		const move = bound('scroll-down') || key === 'ArrowDown' ? 1 : bound('scroll-up') || key === 'ArrowUp' ? -1 : 0;
-		// The outline: the scroll keys and arrows move, h / l fold, Enter goes there.
+		return bindings;
+	};
+
+	const matcher = new SequenceMatcher();
+	let timer: number | undefined;
+	const clearPending = () => {
+		window.clearTimeout(timer);
+		matcher.reset();
+	};
+
+	/** What an action does where the keys are: in the outline and the results, moving means moving through them. */
+	const perform = (v: DocumentView, action: ReaderKeyAction) => {
+		const sidebar = v.sidebar;
+		const mode = sidebar.keysMode();
+		const step: Partial<Record<ReaderKeyAction, number>> = { 'scroll-down': 1, 'scroll-up': -1, top: -Infinity, bottom: Infinity };
+		const by = step[action];
+		if (mode === 'toc' && by !== undefined) return sidebar.moveTocCursor(by);
+		if (mode === 'results' && by !== undefined) return sidebar.moveResults(by);
+		actions[action](v);
+	};
+
+	/** Keys of the outline and the results that aren't bindings: arrows, h / l, Enter, Escape. */
+	const modeKey = (v: DocumentView, chord: string): (() => void) | null => {
+		const sidebar = v.sidebar;
 		const mode = sidebar.keysMode();
 		if (mode && !v.sidebarTabShown(mode === 'toc' ? 'toc' : 'search')) sidebar.setKeyMode(null);
 		else if (mode === 'toc') {
-			if (move) return run(() => sidebar.moveTocCursor(move));
-			if (key === 'h' || key === 'ArrowLeft') return run(() => sidebar.foldTocCursor(false));
-			if (key === 'l' || key === 'ArrowRight') return run(() => sidebar.foldTocCursor(true));
-			if (key === 'Enter') return run(() => sidebar.openTocCursor());
-			if (key === 'Escape') return run(() => leaveOutline(v));
+			if (chord === 'ArrowDown' || chord === 'ArrowUp') return () => sidebar.moveTocCursor(chord === 'ArrowDown' ? 1 : -1);
+			if (chord === 'h' || chord === 'ArrowLeft') return () => sidebar.foldTocCursor(false);
+			if (chord === 'l' || chord === 'ArrowRight') return () => sidebar.foldTocCursor(true);
+			if (chord === 'Enter') return () => sidebar.openTocCursor();
+			if (chord === 'Escape') return () => leaveOutline(v);
 		} else if (mode === 'results') {
-			// The search results: the scroll keys and arrows move (the document follows), Enter goes there.
-			if (move) return run(() => sidebar.stepResults(move));
-			if (key === 'Enter') return run(() => sidebar.leaveResults());
-			if (key === 'Escape') return run(() => sidebar.setKeyMode(null));
+			if (chord === 'ArrowDown' || chord === 'ArrowUp') return () => sidebar.moveResults(chord === 'ArrowDown' ? 1 : -1);
+			if (chord === 'Enter') return () => sidebar.leaveResults();
+			if (chord === 'Escape') return () => sidebar.setKeyMode(null);
 		}
-		const action = (Object.keys(actions) as ReaderKeyAction[]).find(bound);
-		if (action) run(() => actions[action](v));
+		return null;
 	};
-	// Capture: ahead of the sidebar's own handling (Tab moving the focus)
-	plugin.registerDomEvent(document, 'keydown', handle, { capture: true });
-	// Clicking anywhere leaves the outline's or the results' key mode.
+
+	/** false: the key was used (Obsidian then stops it); undefined: it goes on to the hotkeys. */
+	const handle = (e: KeyboardEvent): false | void => {
+		const s = plugin.settings;
+		if (!s.numberKeyColors && !s.readerKeysEnabled) return;
+		const chord = chordOf(e);
+		if (!chord) return; // a modifier on its own: a sequence goes on
+		const v = plugin.activeView();
+		if (!v?.reader || typing() || activeDocument.querySelector('body > .modal-container, body > .menu, body > .suggestion-container')) return clearPending();
+		if (!matcher.isPending) {
+			if (s.numberKeyColors && /^\d$/.test(chord)) {
+				const n = Number(chord);
+				const color = n === 0 ? null : s.palette[n - 1];
+				if (color === undefined) return;
+				v.setActiveColor(color?.name ?? null);
+				return false;
+			}
+			if (!s.readerKeysEnabled) return;
+			const fixed = modeKey(v, chord);
+			if (fixed) {
+				fixed();
+				return false;
+			}
+		}
+		if (!s.readerKeysEnabled) return;
+		window.clearTimeout(timer);
+		const r = matcher.feed(chord, currentBindings());
+		if (r.kind === 'none') return;
+		if (r.kind === 'run') perform(v, r.action as ReaderKeyAction);
+		else
+			timer = window.setTimeout(() => {
+				matcher.reset();
+				const view = plugin.activeView();
+				if (r.fallback && view?.reader) perform(view, r.fallback as ReaderKeyAction);
+			}, SEQUENCE_TIMEOUT);
+		return false;
+	};
+
+	// First in the root scope, as a wildcard (any key, any modifiers) that passes keys on by returning nothing
+	const root = plugin.app.scope as unknown as { keys: ScopeKey[]; register(m: null, k: null, f: ScopeKey['func']): ScopeKey; unregister(k: ScopeKey): void };
+	const entry = root.register(null, null, handle);
+	root.keys.splice(root.keys.indexOf(entry), 1);
+	root.keys.unshift(entry);
+	plugin.register(() => {
+		clearPending();
+		root.unregister(entry);
+	});
+	// Clicking anywhere leaves the outline's or the results' key mode, and forgets a half-typed sequence.
 	plugin.registerDomEvent(document, 'mousedown', () => {
+		clearPending();
 		for (const v of plugin.views()) v.sidebar?.setKeyMode(null);
 	});
 }

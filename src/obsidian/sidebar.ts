@@ -227,6 +227,13 @@ export class Sidebar {
 		return true;
 	}
 
+	/** In the results' key mode: the next / previous result (wrapping), or with ±Infinity the first / last one. */
+	moveResults(by: number): void {
+		if (!this.results.length) return;
+		if (Number.isFinite(by)) this.stepResults(by);
+		else this.select(by > 0 ? this.results.length - 1 : 0);
+	}
+
 	/** Done with the results: back to the document (a drawer-style sidebar gets out of the way). */
 	leaveResults(): void {
 		this.setKeyMode(null);

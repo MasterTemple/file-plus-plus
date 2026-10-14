@@ -1,7 +1,7 @@
-import { PluginSettingTab, Setting, debounce, type App } from 'obsidian';
+import { Platform, PluginSettingTab, Scope, Setting, debounce, type App, type TextComponent } from 'obsidian';
 import { AnnotationFolderModal } from '../annotator/annotation-folder';
 import { buildAppearanceControls, globalAppearance } from './appearance';
-import { keyLabel, keyName } from './keys';
+import { chordOf, parseBinding } from './key-sequence';
 import type { FilePlusPlusPlugin } from './plugin';
 import { card, md, section, Tabs, type Section, type TabSpec } from './settings-kit';
 import { titleCase, READER_KEY_ACTIONS, HIGHLIGHT_GESTURE_LABELS, HIGHLIGHT_MENU_LABELS, SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, ORIENTATION_LABELS, type HighlightGestureAction, type Orientation, needsComment, newFormatId, syncMenus, type AnnotationMode, type CopyAction, type LinkStyle, type LinkPlace, type LinkType, type OpenTarget } from './settings';
@@ -273,7 +273,7 @@ export class FppSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		const keys = group('reading', 'Keyboard', `Keys without modifiers while a ${noun} is focused (not while typing). Obsidian's hotkeys need a modifier; *${manifest.name}: Use highlight color 1…9* and the other commands take one.`);
+		const keys = group('reading', 'Keyboard', `Keys while a ${noun} is focused (not while typing), ahead of Obsidian's hotkeys there. The number keys and the commands *${manifest.name}: Use highlight color 1…9* (for Obsidian hotkeys) pick the highlight color.`);
 		new Setting(keys.items)
 			.setName('Number keys pick the color')
 			.setDesc('1–9 pick a color in palette order (under Highlights), 0 no color.')
@@ -286,7 +286,11 @@ export class FppSettingTab extends PluginSettingTab {
 		let keyRows: Setting[] = [];
 		new Setting(keys.items)
 			.setName('Vim-like keys')
-			.setDesc('Scrolling, search, the outline, the sidebar and comments. Click a key to change it (Backspace turns it off, Escape keeps it).')
+			.setDesc(
+				md(
+					'Scrolling, search, the outline, the sidebar and comments. A key is written as typed (`j`, `G`, `/`) or named (`Tab`, `Enter`, `Space`, `ArrowDown`), with modifiers in front (`Ctrl+d`, `Alt+j`, `Shift+Tab`, `Mod+k`: Cmd on a Mac, Ctrl elsewhere); several keys in a row are separated by spaces (`g g`). Empty turns it off. Or record it with the keyboard button: press the keys, then wait a second.',
+				),
+			)
 			.addToggle((t) =>
 				t.setValue(s.readerKeysEnabled).onChange(async (v) => {
 					s.readerKeysEnabled = v;
@@ -297,40 +301,65 @@ export class FppSettingTab extends PluginSettingTab {
 		keyRows = READER_KEY_ACTIONS.map((a) => {
 			const row = new Setting(keys.items).setName(a.name).setClass('fpp-subsetting');
 			if ('desc' in a) row.setDesc(a.desc);
-			row.addButton((b) => {
-				const show = () => {
-					b.setButtonText(keyLabel(s.readerKeys[a.id]));
-					b.buttonEl.toggleClass('fpp-key-off', !s.readerKeys[a.id]);
-				};
-				show();
-				b.buttonEl.addClass('fpp-key-button');
-				b.onClick(() => {
-					b.setButtonText('Press a key…');
-					const doc = b.buttonEl.doc;
-					const done = () => {
-						doc.removeEventListener('keydown', onKey, true);
-						doc.removeEventListener('mousedown', cancel, true);
-						show();
-					};
-					const cancel = () => done();
-					const onKey = async (e: KeyboardEvent) => {
-						e.preventDefault();
-						e.stopPropagation();
-						if (e.key === 'Escape') return done();
-						const key = e.key === 'Backspace' || e.key === 'Delete' ? '' : keyName(e);
-						if (key === null) return; // a modifier: wait for the key
-						s.readerKeys[a.id] = key;
-						done();
-						await save();
-					};
-					doc.addEventListener('keydown', onKey, true);
-					doc.addEventListener('mousedown', cancel, true);
+			let text!: TextComponent;
+			const setBinding = async (value: string) => {
+				const chords = parseBinding(value, Platform.isMacOS);
+				text.inputEl.toggleClass('fpp-key-invalid', !chords);
+				text.inputEl.setAttr('aria-label', chords ? '' : 'Not a key: see the description above');
+				if (!chords) return;
+				s.readerKeys[a.id] = chords.join(' ');
+				await save();
+			};
+			row.addText((t) => {
+				text = t;
+				t.inputEl.addClass('fpp-key-input');
+				t.setPlaceholder('Off').setValue(s.readerKeys[a.id]).onChange(setBinding);
+				// Shown normalized (`ctrl+D` → `Ctrl+D`) once done
+				t.inputEl.addEventListener('blur', () => {
+					if (!t.inputEl.hasClass('fpp-key-invalid')) t.setValue(s.readerKeys[a.id]);
 				});
 			});
 			row.addExtraButton((b) =>
 				b
+					.setIcon('keyboard')
+					.setTooltip('Record keys')
+					.onClick(() => {
+						// A scope of its own while recording: ahead of the settings' Escape and every hotkey
+						const scope = new Scope();
+						const chords: string[] = [];
+						let timer = 0;
+						const done = async (keep: boolean) => {
+							window.clearTimeout(timer);
+							this.app.keymap.popScope(scope);
+							b.extraSettingsEl.removeClass('is-active');
+							text.setPlaceholder('Off');
+							if (keep && chords.length) await setBinding(chords.join(' '));
+							text.setValue(s.readerKeys[a.id]);
+						};
+						scope.register(null, null, (e) => {
+							const chord = chordOf(e);
+							if (!chord) return false;
+							if (chord === 'Escape' && !chords.length) {
+								void done(false);
+								return false;
+							}
+							chords.push(chord);
+							text.setValue(chords.join(' '));
+							window.clearTimeout(timer);
+							timer = window.setTimeout(() => void done(true), 1000);
+							return false;
+						});
+						this.app.keymap.pushScope(scope);
+						b.extraSettingsEl.addClass('is-active');
+						text.setValue('');
+						text.setPlaceholder('Press keys…');
+						timer = window.setTimeout(() => void done(false), 5000);
+					}),
+			);
+			row.addExtraButton((b) =>
+				b
 					.setIcon('rotate-ccw')
-					.setTooltip(`Default: ${keyLabel(a.key)}`)
+					.setTooltip(`Default: ${a.key}`)
 					.onClick(async () => {
 						s.readerKeys[a.id] = a.key;
 						await save();

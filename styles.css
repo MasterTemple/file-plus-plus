@@ -1655,10 +1655,11 @@ body.fpp-appearance-open .mobile-navbar {
 }
 
 /* Reader keys in the settings */
-.fpp-key-button {
-	min-width: 6em;
+.fpp-key-input {
+	width: 9em;
 	font-family: var(--font-monospace);
 }
-.fpp-key-button.fpp-key-off {
-	color: var(--text-faint);
+.fpp-key-input.fpp-key-invalid {
+	border-color: var(--text-error);
+	color: var(--text-error);
 }

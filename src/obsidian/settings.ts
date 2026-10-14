@@ -33,6 +33,8 @@ export const READER_KEY_ACTIONS = [
 	{ id: 'scroll-up', key: 'k', name: 'Scroll up', desc: 'In the outline and the search results: the previous entry.' },
 	{ id: 'page-down', key: 'd', name: 'Scroll down half a screen' },
 	{ id: 'page-up', key: 'u', name: 'Scroll up half a screen' },
+	{ id: 'top', key: 'g g', name: 'Go to the beginning', desc: 'In the outline and the search results: the first entry.' },
+	{ id: 'bottom', key: 'G', name: 'Go to the end', desc: 'In the outline and the search results: the last entry.' },
 	{ id: 'search', key: '/', name: 'Search', desc: 'In the search box, Ctrl+N / Ctrl+P go to the next / previous result, and Enter moves into the results: the scroll keys move, Enter goes there, / back to the box.' },
 	{ id: 'next-result', key: 'n', name: 'Next search result' },
 	{ id: 'prev-result', key: 'N', name: 'Previous search result' },
@@ -96,7 +98,7 @@ export interface FppSettings {
 	numberKeyColors: boolean;
 	/** Vim-like keys in a focused document (`readerKeys`); off by default. */
 	readerKeysEnabled: boolean;
-	/** Each reader key action's key (`KeyboardEvent.key`, `Shift+` for shifted named keys); '' = off. */
+	/** Each reader key action's binding (see key-sequence.ts: `j`, `Ctrl+d`, `g g`); '' = off. */
 	readerKeys: Record<ReaderKeyAction, string>;
 	/** Color picked last in a menu or the palette (null = no color); undefined until first pick. */
 	lastColor?: string | null;

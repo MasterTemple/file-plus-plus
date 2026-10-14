@@ -37,7 +37,7 @@ let expr = opt('--eval');
 const file = opt('--file');
 if (file) expr = await Bun.file(file).text();
 if (expr) {
-	const res = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
+	const res = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true, includeCommandLineAPI: true });
 	if (res.exceptionDetails) console.log('EXCEPTION', res.exceptionDetails.exception?.description ?? JSON.stringify(res.exceptionDetails));
 	else console.log(typeof res.result?.value === 'string' ? res.result.value : JSON.stringify(res.result?.value, null, 1));
 }
