@@ -590,6 +590,9 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		});
 	}
 
+	/** How far down the view `scrollToRange` puts a range at `position: 'center'` (a fraction of its height). */
+	readonly centerLine = 0.3;
+
 	scrollToRange(range: Range, opts: { flash?: boolean | FlashOptions; position?: 'top' | 'center' } = {}): void {
 		const position = opts.position ?? 'center';
 		this.anchor = range;
@@ -600,7 +603,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			const rect = rangeRect(range);
 			if (!rect) return;
 			const box = this.scroller.getBoundingClientRect();
-			const offset = position === 'top' ? 16 : box.height * 0.3;
+			const offset = position === 'top' ? 16 : box.height * this.centerLine;
 			this.scroller.scrollTop += rect.top - box.top - offset;
 		};
 		doScroll();

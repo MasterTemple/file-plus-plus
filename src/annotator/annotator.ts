@@ -100,6 +100,22 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 				if (shown && v?.reader && !v.marginComments.visible) this.plugin.notice(v.plugin.annotator.index.get(v.file?.path ?? '').some((e) => e.comment) ? 'the pane is too narrow for comments in the margin.' : `this ${this.plugin.format.noun} has no comments yet.`);
 			},
 		});
+		for (const [id, name, by, comments] of [
+			['next-highlight', 'Go to the next highlight', 1, false],
+			['previous-highlight', 'Go to the previous highlight', -1, false],
+			['next-comment', 'Go to the next comment', 1, true],
+			['previous-comment', 'Go to the previous comment', -1, true],
+		] as const)
+			this.plugin.addCommand({
+				id,
+				name,
+				checkCallback: (checking) => {
+					const v = this.plugin.activeView();
+					if (!v?.reader) return false;
+					if (!checking) v.annotations.step(by, comments);
+					return true;
+				},
+			});
 		const copyCommand = (id: string, title: string, target: () => CopyTarget | null) =>
 			this.plugin.addCommand({
 				id,

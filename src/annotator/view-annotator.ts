@@ -4,6 +4,7 @@ import { ANNOTATION_MODES, type AnnotationMode, type HighlightGestureAction } fr
 import type { DocumentView } from '../obsidian/view';
 import { askForComment } from './comment-modal';
 import type { HighlightEntry } from './highlight-index';
+import { stepHighlight } from './highlight-steps';
 
 /**
  * The annotator's part of a document's view: drawing the highlights (links from notes) and their
@@ -30,6 +31,41 @@ export class ViewAnnotator<Doc = unknown, R extends DocumentReader = DocumentRea
 		const shown = new Set(this.view.reader.getHighlights().map((h) => h.id));
 		const entries = this.view.plugin.annotator.index.get(this.view.file.path).filter((e) => shown.has(e.id));
 		this.view.marginComments.update(entries, [...this.view.providerNotes.values()]);
+	}
+
+	/** The highlight `] h` / `] c` went to last, and where it starts on screen once there (null: not there yet). */
+	private stepped: { id: string; top: number | null } | null = null;
+
+	/**
+	 * Go to the next (`by` 1) or previous (-1) highlight, or highlight with a comment: after the one
+	 * gone to last, or, once the view has moved, after where it is.
+	 */
+	step(by: 1 | -1, comments: boolean): void {
+		const { reader, plugin } = this.view;
+		if (!reader?.isRendered) return;
+		const items = reader
+			.getHighlights()
+			.filter((h) => !comments || (h.data as HighlightEntry | undefined)?.comment)
+			.map((h) => ({ id: h.id, range: reader.highlightRange(h.id) }))
+			.filter((h): h is { id: string; range: Range } => !!h.range)
+			.sort((a, b) => a.range.compareBoundaryPoints(Range.START_TO_START, b.range) || a.range.compareBoundaryPoints(Range.END_TO_END, b.range));
+		const what = comments ? 'comment' : 'highlight';
+		if (!items.length) return void plugin.notice(`this ${plugin.format.noun} has no ${what}s yet.`, 2000);
+		const topOf = (range: Range) => (range.getClientRects()[0] ?? range.getBoundingClientRect()).top;
+		const at = this.stepped ? items.findIndex((h) => h.id === this.stepped!.id) : -1;
+		const stayed = at >= 0 && (this.stepped!.top === null || Math.abs(topOf(items[at].range) - this.stepped!.top) < 2);
+		const box = reader.scroller.getBoundingClientRect();
+		const i = stepHighlight(items.length, by, stayed ? at : null, (k) => topOf(items[k].range), box.top + box.height * reader.centerLine);
+		if (i === null) return void plugin.notice(by > 0 ? `no ${what}s after this.` : `no ${what}s before this.`, 1500);
+		const { id, range } = items[i];
+		const stepped = (this.stepped = { id, top: null as number | null });
+		this.view.recordJump();
+		reader.scrollToRange(range, { flash: true, position: 'center' });
+		// Where it ended up, once scrollToRange's corrections (two frames) are done
+		const win = reader.scroller.win;
+		win.requestAnimationFrame(() => win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
+			if (this.stepped === stepped) stepped.top = topOf(range);
+		})));
 	}
 
 	/** Mobile gestures on highlights (see settings). Several overlapping highlights open the menu. */

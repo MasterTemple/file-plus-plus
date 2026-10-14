@@ -56,9 +56,14 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 			v.sidebar.setKeyMode(null);
 			v.toggleSidebar();
 		},
-		'open-file': () => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:open-file`),
-		comments: () => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:toggle-margin-comments`),
+		'open-file': () => command('open-file'),
+		comments: () => command('toggle-margin-comments'),
+		'next-highlight': () => command('next-highlight'),
+		'prev-highlight': () => command('previous-highlight'),
+		'next-comment': () => command('next-comment'),
+		'prev-comment': () => command('previous-comment'),
 	};
+	const command = (id: string) => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:${id}`);
 	const scroller = new KeyScroller();
 	/** By `screens` of the view (a held key: on at `speed` screens a second). */
 	const scroll = (v: DocumentView, screens: number, speed: number) => {
