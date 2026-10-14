@@ -27,7 +27,10 @@ if curl -s "localhost:$port/json/version" > /dev/null; then
 	exit 1
 fi
 rm -f "$vault"/.obsidian/workspace*.json   # stale layouts cause "plugin no longer active" tabs
-(electron43 /usr/lib/obsidian/app.asar --user-data-dir="$profile" --ozone-platform=headless --disable-gpu \
+# A system Electron with Obsidian's app.asar, else the `obsidian` launcher (an AppImage, say; $FPP_OBSIDIAN)
+if command -v electron43 > /dev/null && [ -f /usr/lib/obsidian/app.asar ]; then launch=(electron43 /usr/lib/obsidian/app.asar)
+else launch=("${FPP_OBSIDIAN:-obsidian}"); fi
+("${launch[@]}" --user-data-dir="$profile" --ozone-platform=headless --disable-gpu \
 	--remote-debugging-port=$port > "$profile/obsidian.log" 2>&1 &)
 
 # Wait for the page, enable plugins (first run asks to trust the vault), size the window.
@@ -36,6 +39,7 @@ sleep 4
 mode="${1:-desktop}"
 bun "$here/cdp.ts" --port $port --eval "(async()=>{
 	document.querySelector('.mod-trust-folder button.mod-cta')?.click();
+	[...document.querySelectorAll('.modal button')].find((b) => /^Trust author/.test(b.textContent))?.click();
 	if (!app.plugins.isEnabled()) await app.plugins.setEnable(true);
 	app.setting?.close?.();
 	const mobile = '$mode' === 'mobile';

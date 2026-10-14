@@ -5,7 +5,7 @@ import { searchIndex, type SearchMatch, type SearchOptions } from './search';
 import { TextIndex } from './text-index';
 import { Emitter } from './emitter';
 import { rangeToMarkdown } from './markdown';
-import { sentenceBounds, sentenceEndAt, sentenceRange, sentenceStartAt } from './sentences';
+import { blockText, sentenceBounds, sentenceEndAt, sentenceRange, sentenceStartAt } from './sentences';
 import { BASE_CSS, DEFAULT_SETTINGS, settingsToVars, type ReaderSettings } from './settings';
 import { Margin } from './margin';
 
@@ -781,8 +781,8 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		const b = startBlock === endBlock ? a : blockText(endBlock);
 		const at = a.offset(range.startContainer, range.startOffset);
 		const to = b.offset(range.endContainer, range.endOffset);
-		const s = sentenceStartAt(a.text, at, langOf(startBlock));
-		const e = sentenceEndAt(b.text, to, langOf(endBlock));
+		const s = sentenceStartAt(a.text, at, langOf(startBlock), a.notes);
+		const e = sentenceEndAt(b.text, to, langOf(endBlock), b.notes);
 		// Spaces at the selection's edges (`rangeText` trims them) still separate it from what's around it
 		if (/\s/.test(a.text[at] ?? '')) text = ` ${text}`;
 		if (/\s/.test(b.text[to - 1] ?? '')) text = `${text} `;
@@ -826,8 +826,8 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			const other = this.blockOf(n);
 			if (!other || other.contains(block) || block.contains(other) || /^h[1-6]$/.test(other.localName)) return null;
 			if (this.sectionIndexOf(other) !== section) return null;
-			const { text } = blockText(other);
-			const bounds = sentenceBounds(text, langOf(other)).filter(([x, y]) => y > x);
+			const { text, notes } = blockText(other);
+			const bounds = sentenceBounds(text, langOf(other), notes).filter(([x, y]) => y > x);
 			const [x, y] = (dir < 0 ? bounds[bounds.length - 1] : bounds[0]) ?? [0, 0];
 			return text.slice(x, y).replace(/\s+/g, ' ') || null;
 		}
@@ -1549,34 +1549,6 @@ export function linesContain(range: Range, x: number, y: number, slack = 1): boo
 function langOf(el: Element): string | undefined {
 	const l = el.closest('[lang], [xml\\:lang]');
 	return l?.getAttribute('lang') ?? l?.getAttribute('xml:lang') ?? undefined;
-}
-
-/** A block's text (as `sentenceRange` sees it), and where a boundary point falls in it */
-function blockText(block: Element): { text: string; offset(node: Node, offset: number): number } {
-	const doc = block.ownerDocument;
-	const texts: Text[] = [];
-	const walker = doc.createTreeWalker(block, NodeFilter.SHOW_TEXT);
-	for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
-		if (!n.parentElement?.closest('script, style, rt, rp')) texts.push(n);
-	}
-	const starts: number[] = [];
-	let total = 0;
-	for (const t of texts) {
-		starts.push(total);
-		total += t.data.length;
-	}
-	return {
-		text: texts.map((t) => t.data).join(''),
-		offset(node, offset) {
-			const i = texts.indexOf(node as Text);
-			if (i >= 0) return starts[i] + Math.min(offset, texts[i].data.length);
-			// An element position (or a skipped text node): the text after it
-			const probe = doc.createRange();
-			probe.setStart(node, offset);
-			const k = texts.findIndex((t) => probe.comparePoint(t, 0) >= 0);
-			return k < 0 ? total : starts[k];
-		},
-	};
 }
 
 const BLOCK_RE = /^(p|div|h[1-6]|li|blockquote|section|article|header|footer|pre|tr|dd|dt|figure|figcaption|aside|table|ul|ol)$/;
