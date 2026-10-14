@@ -148,6 +148,10 @@
 	background: var(--background-modifier-active-hover);
 	color: var(--text-accent);
 }
+.fpp-toc-keys .fpp-toc-self.fpp-toc-cursor {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -2px;
+}
 .fpp-toc-self.is-disabled {
 	color: var(--text-faint);
 	cursor: default;
@@ -1647,4 +1651,13 @@ body.fpp-appearance-open .mobile-navbar {
 .is-phone .fpp-settings .fpp-format-row .fpp-template {
 	flex: 1 1 100%;
 	order: 3;
+}
+
+/* Reader keys in the settings */
+.fpp-key-button {
+	min-width: 6em;
+	font-family: var(--font-monospace);
+}
+.fpp-key-button.fpp-key-off {
+	color: var(--text-faint);
 }

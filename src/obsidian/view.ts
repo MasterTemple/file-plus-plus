@@ -1255,6 +1255,12 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		return this.mainEl.hasClass('fpp-sidebar-open') && this.sidebar.isActive(id);
 	}
 
+	/** The sidebar at the contents, moved through with keys (reader keys) */
+	openOutlineKeys(): void {
+		this.showSidebarTab('toc');
+		this.sidebar.setTocKeys(true);
+	}
+
 	openSearch(): void {
 		this.toggleSidebar(true, false);
 		this.sidebar.showTab('search');

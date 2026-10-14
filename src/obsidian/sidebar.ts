@@ -133,6 +133,7 @@ export class Sidebar {
 	}
 
 	setToc(toc: TocItem[] | null): void {
+		this.setTocKeys(false);
 		this.tocEl.empty();
 		this.tocItems.clear();
 		this.results = [];
@@ -189,6 +190,64 @@ export class Sidebar {
 		// expand ancestors
 		for (let p = el.parentElement; p && p !== this.tocEl; p = p.parentElement) if (p.hasClass('is-collapsed')) p.removeClass('is-collapsed');
 		el.scrollIntoView({ block: 'nearest' });
+	}
+
+	// --- Moving through the TOC with keys (reader keys) ------------------------------------------
+
+	private tocCursor: HTMLElement | null = null;
+	private tocKeys = false;
+
+	tocKeysActive(): boolean {
+		return this.tocKeys;
+	}
+
+	/** Start (at the current chapter) or stop moving through the TOC with keys. */
+	setTocKeys(on: boolean): void {
+		if (on === this.tocKeys) return;
+		this.tocKeys = on;
+		this.tocEl.toggleClass('fpp-toc-keys', on);
+		if (!on) return this.setTocCursor(null);
+		const current = this.currentToc ? this.tocItems.get(this.currentToc) : null;
+		this.setTocCursor(current ?? this.visibleTocItems()[0] ?? null);
+	}
+
+	/** TOC entries not inside a collapsed one, in order. */
+	private visibleTocItems(): HTMLElement[] {
+		return [...this.tocItems.values()].filter((el) => !el.parentElement?.parentElement?.closest('.fpp-toc-item.is-collapsed'));
+	}
+
+	private setTocCursor(el: HTMLElement | null): void {
+		this.tocCursor?.removeClass('fpp-toc-cursor');
+		this.tocCursor = el;
+		el?.addClass('fpp-toc-cursor');
+		el?.scrollIntoView({ block: 'nearest' });
+	}
+
+	moveTocCursor(delta: number): void {
+		const items = this.visibleTocItems();
+		if (!items.length) return;
+		const i = this.tocCursor ? items.indexOf(this.tocCursor) : -1;
+		this.setTocCursor(items[Math.max(0, Math.min(items.length - 1, i === -1 ? 0 : i + delta))]);
+	}
+
+	/** Expand (`open`) or collapse the entry at the cursor; collapsing a leaf (or a collapsed entry) goes to its parent. */
+	foldTocCursor(open: boolean): void {
+		const wrap = this.tocCursor?.parentElement;
+		if (!wrap) return;
+		const parent = wrap.parentElement?.closest<HTMLElement>('.fpp-toc-item');
+		const hasChildren = !!wrap.querySelector(':scope > .tree-item-children');
+		if (open) {
+			if (hasChildren && wrap.hasClass('is-collapsed')) wrap.removeClass('is-collapsed');
+			else if (hasChildren) this.moveTocCursor(1);
+		} else if (hasChildren && !wrap.hasClass('is-collapsed')) wrap.addClass('is-collapsed');
+		else if (parent) this.setTocCursor(parent.querySelector<HTMLElement>(':scope > .fpp-toc-self'));
+	}
+
+	/** Go to the entry at the cursor (as a click would), leaving key mode. */
+	openTocCursor(): void {
+		const el = this.tocCursor;
+		this.setTocKeys(false);
+		if (el && !el.hasClass('is-disabled')) el.click();
 	}
 
 	// --- Search ----------------------------------------------------------------------------------

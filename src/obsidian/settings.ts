@@ -27,6 +27,19 @@ export interface MenuEntry {
 	show: boolean;
 }
 
+/** What a reader key (`readerKeys`) does, its default key and its name in the settings. */
+export const READER_KEY_ACTIONS = [
+	{ id: 'scroll-down', key: 'j', name: 'Scroll down', desc: 'In the outline: the next entry.' },
+	{ id: 'scroll-up', key: 'k', name: 'Scroll up', desc: 'In the outline: the previous entry.' },
+	{ id: 'page-down', key: 'd', name: 'Scroll down half a screen' },
+	{ id: 'page-up', key: 'u', name: 'Scroll up half a screen' },
+	{ id: 'search', key: '/', name: 'Search' },
+	{ id: 'outline', key: 'Tab', name: 'Outline', desc: 'Opens the contents to move through with the scroll keys (or arrows); h / l collapse and expand, Enter goes there, Escape leaves it. Again closes it.' },
+	{ id: 'left-sidebar', key: '\\', name: "Toggle Obsidian's left sidebar" },
+	{ id: 'comments', key: 'c', name: 'Toggle comments in the margin' },
+] as const;
+export type ReaderKeyAction = (typeof READER_KEY_ACTIONS)[number]['id'];
+
 /** The format's own locator (`primary`: an EPUB CFI, a timestamp…) or a text fragment. */
 export type LinkType = 'primary' | 'text';
 /** What a touch gesture on a highlight does (mobile). */
@@ -79,6 +92,10 @@ export interface FppSettings {
 	defaultColor: string;
 	/** Bare 1–9 pick a palette color (0: none) while a document is focused (not while typing). */
 	numberKeyColors: boolean;
+	/** Vim-like keys in a focused document (`readerKeys`); off by default. */
+	readerKeysEnabled: boolean;
+	/** Each reader key action's key (`KeyboardEvent.key`, `Shift+` for shifted named keys); '' = off. */
+	readerKeys: Record<ReaderKeyAction, string>;
 	/** Color picked last in a menu or the palette (null = no color); undefined until first pick. */
 	lastColor?: string | null;
 	/** Include `&color=` in copied links. */
@@ -207,6 +224,8 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	],
 	defaultColor: 'yellow',
 	numberKeyColors: false,
+	readerKeysEnabled: false,
+	readerKeys: Object.fromEntries(READER_KEY_ACTIONS.map((a) => [a.id, a.key])) as Record<ReaderKeyAction, string>,
 	colorInLinks: true,
 	timestampInLinks: true,
 	marginComments: true,

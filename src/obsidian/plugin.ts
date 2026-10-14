@@ -2,6 +2,7 @@ import { formatLocator, type DocumentReader, type ReaderSettings } from '../core
 import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, parseLinktext, type PaneType, type ViewState, type Workspace, type OpenViewState } from 'obsidian';
 import { around } from './patch';
 import { shareHotkeys } from './hotkeys';
+import { registerReaderKeys, typing } from './keys';
 import { hoverLink } from './hover';
 import { resolveFile, type HighlightEntry } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
@@ -312,6 +313,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.settings = { ...defaults, ...data, appearance: { desktop: appearance('desktop'), mobile: appearance('mobile') } };
 		const opening = (place: LinkPlace) => ({ ...defaults.linkOpening[place], ...data?.linkOpening?.[place] });
 		this.settings.linkOpening = { mobile: opening('mobile'), desktop: opening('desktop'), half: opening('half') };
+		this.settings.readerKeys = { ...defaults.readerKeys, ...data.readerKeys };
 		delete (this.settings as { reader?: unknown }).reader;
 		this.migrateSettings(data);
 		// Formats saved before format ids existed.
@@ -822,10 +824,6 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 			});
 		// No default hotkeys. Off while typing (the sidebar's search, a comment), so a key bound to
 		// one then types; shareHotkeys passes it on.
-		const typing = () => {
-			const el = activeDocument.activeElement as HTMLElement | null;
-			return !!el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
-		};
 		const colorCommand = (id: string, title: string, pick: () => PaletteColor | null | undefined) =>
 			this.addCommand({
 				id,
@@ -838,16 +836,8 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 					return true;
 				},
 			});
-		// Obsidian's hotkey settings won't record a bare digit, so the setting handles them itself.
-		this.registerDomEvent(document, 'keydown', (e) => {
-			if (!this.settings.numberKeyColors || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || !/^Digit\d$/.test(e.code)) return;
-			const v = this.activeView();
-			const n = Number(e.code.slice(5));
-			const color = n === 0 ? null : this.settings.palette[n - 1];
-			if (!v?.reader || color === undefined || typing()) return;
-			e.preventDefault();
-			v.setActiveColor(color?.name ?? null);
-		});
+		// Obsidian's hotkey settings won't record a bare digit (or j / k): the reader handles those itself.
+		registerReaderKeys(this as unknown as FilePlusPlusPlugin);
 		for (let i = 1; i <= 9; i++) colorCommand(`color-${i}`, `Use highlight color ${i} (palette order)`, () => this.settings.palette[i - 1]);
 		colorCommand('color-none', 'Use no highlight color', () => null);
 		this.addCommand({ id: 'appearance', name: 'Reading appearance', checkCallback: withView((v) => v.toggleAppearance()) });
