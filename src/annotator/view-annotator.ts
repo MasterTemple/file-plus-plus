@@ -60,7 +60,7 @@ export class ViewAnnotator<Doc = unknown, R extends DocumentReader = DocumentRea
 		const { id, range } = items[i];
 		const stepped = (this.stepped = { id, top: null as number | null });
 		this.view.recordJump();
-		reader.scrollToRange(range, { flash: true, position: 'center' });
+		reader.scrollToRange(range, { flash: { color: reader.highlightColor(id) ?? undefined }, position: 'center' });
 		// Where it ended up, once scrollToRange's corrections (two frames) are done
 		const win = reader.scroller.win;
 		win.requestAnimationFrame(() => win.requestAnimationFrame(() => win.requestAnimationFrame(() => {

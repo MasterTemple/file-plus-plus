@@ -1110,6 +1110,12 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		else this.registry?.delete(name);
 	}
 
+	/** The CSS color a highlight is drawn in. */
+	highlightColor(id: string): string | null {
+		const h = this.highlights.find((h) => h.spec.id === id);
+		return h ? this.colorKey(h.spec.color).css : null;
+	}
+
 	/** Range for a highlight spec (resolved). */
 	highlightRange(id: string): Range | null {
 		return this.highlights.find((h) => h.spec.id === id)?.range ?? null;
