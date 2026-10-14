@@ -1,4 +1,4 @@
-import { Platform } from 'obsidian';
+import { Platform, TFile } from 'obsidian';
 import type { FilePlusPlusPlugin } from './plugin';
 import type { DocumentView } from './view';
 import type { ReaderKeyAction } from './settings';
@@ -29,6 +29,8 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'scroll-up': (v) => scroll(v, -0.15),
 		'page-down': (v) => scroll(v, 0.5),
 		'page-up': (v) => scroll(v, -0.5),
+		'set-mark': (v) => (awaiting = { action: 'set-mark', view: v }),
+		'go-to-mark': (v) => (awaiting = { action: 'go-to-mark', view: v }),
 		top: (v) => v.reader!.scroller.scrollTo({ top: 0, behavior: 'smooth' }),
 		bottom: (v) => v.reader!.scroller.scrollTo({ top: v.reader!.scroller.scrollHeight, behavior: 'smooth' }),
 		search: (v) => {
@@ -37,22 +39,55 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		},
 		'next-result': (v) => v.sidebar.stepResults(1),
 		'prev-result': (v) => v.sidebar.stepResults(-1),
-		outline: (v) => (v.sidebar.keysMode() === 'toc' ? leaveOutline(v) : v.openOutlineKeys()),
+		outline: (v) => (v.sidebar.keysMode() === 'toc' ? v.backToText() : v.openOutlineKeys()),
 		sidebar: (v) => {
 			v.sidebar.setKeyMode(null);
 			v.toggleSidebar();
 		},
 		comments: () => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:toggle-margin-comments`),
 	};
-	/** Back to the text from the outline (a drawer-style sidebar closes). */
-	const leaveOutline = (v: DocumentView) => {
-		v.sidebar.setKeyMode(null);
-		if (v.sidebarIsOverlay()) v.toggleSidebar(false, false);
-	};
 	const scroll = (v: DocumentView, screens: number) => {
 		const el = v.reader!.scroller;
 		el.scrollBy({ top: Math.round(el.clientHeight * screens), behavior: 'smooth' });
 	};
+
+	// Marks: a–z per document, A–Z across documents, ' (or `) where the view was before its last jump
+	const lastJump = new WeakMap<DocumentView, { path: string; locator: string }>();
+	/** Before a jump (g g, G, a mark, a search result, the outline): where `''` goes back to. */
+	const rememberJump = (v: DocumentView) => {
+		const locator = v.reader?.getLocation()?.locator;
+		if (v.file && locator) lastJump.set(v, { path: v.file.path, locator });
+	};
+	const jumpTo = (v: DocumentView, target: { path: string; locator: string }) => {
+		rememberJump(v);
+		if (target.path === v.file?.path) return void v.navigate(target.locator, false);
+		const file = plugin.app.vault.getAbstractFileByPath(target.path);
+		if (!(file instanceof TFile)) return plugin.notice(`${target.path} is gone.`);
+		void v.leaf.openFile(file, { eState: { position: target.locator } });
+	};
+	const setMark = (v: DocumentView, name: string) => {
+		const locator = v.reader?.getLocation()?.locator;
+		if (!v.file || !locator || !/^[a-zA-Z]$/.test(name)) return;
+		const s = plugin.settings;
+		if (name === name.toLowerCase()) (s.marks[v.file.path] ??= {})[name] = locator;
+		else s.globalMarks[name] = { path: v.file.path, locator };
+		void plugin.saveSettings();
+		plugin.notice(`mark ${name} set.`, 1500);
+	};
+	const goToMark = (v: DocumentView, name: string) => {
+		if (!v.file) return;
+		const s = plugin.settings;
+		const target =
+			name === "'" || name === '`'
+				? lastJump.get(v)
+				: name === name.toLowerCase()
+					? ((locator) => locator && { path: v.file!.path, locator })(s.marks[v.file.path]?.[name])
+					: s.globalMarks[name];
+		if (!target) return plugin.notice(name === "'" || name === '`' ? 'no jump to go back to yet.' : `mark ${name} isn't set.`, 2000);
+		jumpTo(v, target);
+	};
+	/** An action that takes the next key as its argument (the mark's letter) */
+	let awaiting: { action: 'set-mark' | 'go-to-mark'; view: DocumentView } | null = null;
 
 	// The bindings, parsed again when the settings change (one that doesn't parse is off)
 	let parsedFrom = '';
@@ -71,6 +106,7 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 	const clearPending = () => {
 		window.clearTimeout(timer);
 		matcher.reset();
+		awaiting = null;
 	};
 
 	/** What an action does where the keys are: in the outline and the results, moving means moving through them. */
@@ -79,6 +115,7 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		const mode = sidebar.keysMode();
 		const step: Partial<Record<ReaderKeyAction, number>> = { 'scroll-down': 1, 'scroll-up': -1, top: -Infinity, bottom: Infinity };
 		const by = step[action];
+		if (!mode && (action === 'top' || action === 'bottom' || action === 'next-result' || action === 'prev-result' || action === 'search')) rememberJump(v);
 		if (mode === 'toc' && by !== undefined) return sidebar.moveTocCursor(by);
 		if (mode === 'results' && by !== undefined) return sidebar.moveResults(by);
 		actions[action](v);
@@ -93,12 +130,16 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 			if (chord === 'ArrowDown' || chord === 'ArrowUp') return () => sidebar.moveTocCursor(chord === 'ArrowDown' ? 1 : -1);
 			if (chord === 'h' || chord === 'ArrowLeft') return () => sidebar.foldTocCursor(false);
 			if (chord === 'l' || chord === 'ArrowRight') return () => sidebar.foldTocCursor(true);
-			if (chord === 'Enter') return () => sidebar.openTocCursor();
-			if (chord === 'Escape') return () => leaveOutline(v);
+			if (chord === 'Enter')
+				return () => {
+					rememberJump(v);
+					sidebar.openTocCursor();
+					v.backToText();
+				};
+			if (chord === 'Escape') return () => v.backToText();
 		} else if (mode === 'results') {
 			if (chord === 'ArrowDown' || chord === 'ArrowUp') return () => sidebar.moveResults(chord === 'ArrowDown' ? 1 : -1);
-			if (chord === 'Enter') return () => sidebar.leaveResults();
-			if (chord === 'Escape') return () => sidebar.setKeyMode(null);
+			if (chord === 'Enter' || chord === 'Escape') return () => v.backToText();
 		}
 		return null;
 	};
@@ -111,6 +152,12 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		if (!chord) return; // a modifier on its own: a sequence goes on
 		const v = plugin.activeView();
 		if (!v?.reader || typing() || activeDocument.querySelector('body > .modal-container, body > .menu, body > .suggestion-container')) return clearPending();
+		if (awaiting) {
+			const { action, view } = awaiting;
+			awaiting = null;
+			if (view === v && chord !== 'Escape') (action === 'set-mark' ? setMark : goToMark)(v, chord);
+			return false;
+		}
 		if (!matcher.isPending) {
 			if (s.numberKeyColors && /^\d$/.test(chord)) {
 				const n = Number(chord);

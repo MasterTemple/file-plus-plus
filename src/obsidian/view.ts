@@ -398,6 +398,9 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			this.sidebar.setCurrent(loc.tocItem);
 		});
 		reader.scroller.addEventListener('scroll', () => this.marginComments.scrolled(), { passive: true });
+		reader.scroller.addEventListener('mousedown', () => {
+			if (this.sidebarTransient) this.backToText();
+		});
 		reader.on('external-link', (_e, url) => window.open(url, '_blank'));
 		reader.on('highlight-click', (e, specs) => {
 			const entries = specs.map((s) => s.data as HighlightEntry);
@@ -1231,11 +1234,25 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	toggleSidebar(open?: boolean, persist = true): void {
 		const isOpen = this.mainEl.hasClass('fpp-sidebar-open');
 		const next = open ?? !isOpen;
+		// Opened for a moment (search, the outline) though the user closed it: closes again back in the text
+		if (persist || !next) this.sidebarTransient = false;
+		else if (!isOpen && !this.plugin.sidebarState().open) this.sidebarTransient = true;
 		this.mainEl.toggleClass('fpp-sidebar-open', next);
 		if (next && !isOpen) this.sidebar?.opened();
 		// Obsidian's mobile navbar overlaps the drawer's bottom; hide it while the drawer is open.
 		this.contentEl.doc.body.toggleClass('fpp-drawer-open', next && this.sidebarIsOverlay());
 		if (persist) this.plugin.rememberSidebar({ open: next });
+	}
+
+	private sidebarTransient = false;
+
+	/**
+	 * Back in the text from the sidebar (reader keys, a click in the text): key modes end, and a
+	 * drawer, or a sidebar opened only for this (see `toggleSidebar`), closes.
+	 */
+	backToText(): void {
+		this.sidebar.setKeyMode(null);
+		if (this.mainEl.hasClass('fpp-sidebar-open') && (this.sidebarTransient || this.sidebarIsOverlay())) this.toggleSidebar(false, false);
 	}
 
 	/** Adds a tab of the format's own to the sidebar (see `Sidebar.addFormatTab`); call it in `buildExtraUi` */

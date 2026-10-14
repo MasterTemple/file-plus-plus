@@ -234,12 +234,6 @@ export class Sidebar {
 		else this.select(by > 0 ? this.results.length - 1 : 0);
 	}
 
-	/** Done with the results: back to the document (a drawer-style sidebar gets out of the way). */
-	leaveResults(): void {
-		this.setKeyMode(null);
-		if (this.view.sidebarIsOverlay()) this.view.toggleSidebar(false, false);
-	}
-
 	/** TOC entries not inside a collapsed one, in order. */
 	private visibleTocItems(): HTMLElement[] {
 		return [...this.tocItems.values()].filter((el) => !el.parentElement?.parentElement?.closest('.fpp-toc-item.is-collapsed'));
@@ -349,6 +343,12 @@ export class Sidebar {
 					this.setKeyMode('results');
 				} else this.step(e.shiftKey ? -1 : 1);
 			} else if (e.key === 'Escape') {
+				// Escape clears the query, and in an empty box goes back to the text
+				if (!this.searchInput.value) {
+					this.searchInput.blur();
+					this.view.backToText();
+					return;
+				}
 				this.searchInput.value = '';
 				this.runSearch();
 			}

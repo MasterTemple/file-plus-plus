@@ -575,11 +575,22 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 						delete this.settings.bookAppearance[oldPath];
 						this.settings.bookAppearance[file.path] = look;
 					}
+					const marks = this.settings.marks[oldPath];
+					if (marks) {
+						delete this.settings.marks[oldPath];
+						this.settings.marks[file.path] = marks;
+					}
+					let moved = !!look || !!marks;
+					for (const m of Object.values(this.settings.globalMarks))
+						if (m.path === oldPath) {
+							m.path = file.path;
+							moved = true;
+						}
 					const pos = this.settings.positions[oldPath];
 					if (pos) {
 						delete this.settings.positions[oldPath];
 						this.savePosition(file.path, pos);
-					} else if (look) this.saveSettings();
+					} else if (moved) this.saveSettings();
 				}
 			}),
 		);

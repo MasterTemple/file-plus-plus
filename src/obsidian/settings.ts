@@ -35,6 +35,8 @@ export const READER_KEY_ACTIONS = [
 	{ id: 'page-up', key: 'u', name: 'Scroll up half a screen' },
 	{ id: 'top', key: 'g g', name: 'Go to the beginning', desc: 'In the outline and the search results: the first entry.' },
 	{ id: 'bottom', key: 'G', name: 'Go to the end', desc: 'In the outline and the search results: the last entry.' },
+	{ id: 'set-mark', key: 'm', name: 'Set a mark', desc: 'Then a letter: a–z in this document, A–Z across documents.' },
+	{ id: 'go-to-mark', key: "'", name: 'Go to a mark', desc: "Then its letter, or ' for where you were before the last jump." },
 	{ id: 'search', key: '/', name: 'Search', desc: 'In the search box, Ctrl+N / Ctrl+P go to the next / previous result, and Enter moves into the results: the scroll keys move, Enter goes there, / back to the box.' },
 	{ id: 'next-result', key: 'n', name: 'Next search result' },
 	{ id: 'prev-result', key: 'N', name: 'Previous search result' },
@@ -175,6 +177,10 @@ export interface FppSettings {
 	settingsVersion: number;
 	/** Last reading position (a locator) per document path. */
 	positions: Record<string, string>;
+	/** Reader-key marks a–z (Vim's `m a`): document path → mark → locator. */
+	marks: Record<string, Record<string, string>>;
+	/** Marks A–Z, across documents (Vim's file marks). */
+	globalMarks: Record<string, { path: string; locator: string }>;
 }
 
 /** Asks for a comment: the quote is nested inside the callout, the comment follows it. */
@@ -281,6 +287,8 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	sidebarOpen: true,
 	selectionBar: true,
 	positions: {},
+	marks: {},
+	globalMarks: {},
 };
 
 export function newFormatId(): string {
