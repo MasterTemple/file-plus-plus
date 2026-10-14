@@ -33,6 +33,8 @@ export const READER_KEY_ACTIONS = [
 	{ id: 'scroll-up', key: 'k', name: 'Scroll up', desc: 'In the outline and the search results: the previous entry.' },
 	{ id: 'page-down', key: 'd', name: 'Scroll down half a screen' },
 	{ id: 'page-up', key: 'u', name: 'Scroll up half a screen' },
+	{ id: 'screen-down', key: 'f', name: 'Scroll down a screen' },
+	{ id: 'screen-up', key: 'b', name: 'Scroll up a screen' },
 	{ id: 'top', key: 'g g', name: 'Go to the beginning', desc: 'In the outline and the search results: the first entry.' },
 	{ id: 'bottom', key: 'G', name: 'Go to the end', desc: 'In the outline and the search results: the last entry.' },
 	{ id: 'set-mark', key: 'm', name: 'Set a mark', desc: 'Then a letter: a–z in this document, A–Z across documents.' },
@@ -44,6 +46,7 @@ export const READER_KEY_ACTIONS = [
 	{ id: 'prev-result', key: 'N', name: 'Previous search result' },
 	{ id: 'outline', key: 'Tab', name: 'Outline', desc: 'Moves into the contents: the scroll keys (or arrows) move, h / l collapse and expand, Enter goes there. Again (or Escape) goes back to the text.' },
 	{ id: 'sidebar', key: '\\', name: 'Toggle the sidebar', desc: 'Contents, search and highlights.' },
+	{ id: 'open-file', key: 'e', name: 'Open another document', desc: 'As the command (a file picker for this format only).' },
 	{ id: 'comments', key: 'c', name: 'Toggle comments in the margin' },
 ] as const;
 export type ReaderKeyAction = (typeof READER_KEY_ACTIONS)[number]['id'];

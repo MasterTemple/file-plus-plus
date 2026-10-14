@@ -1,9 +1,10 @@
-import { Platform, TFile } from 'obsidian';
+import { Platform } from 'obsidian';
 import type { FilePlusPlusPlugin } from './plugin';
 import type { DocumentView } from './view';
 import type { ReaderKeyAction } from './settings';
 import { chordOf, parseBinding, SequenceMatcher } from './key-sequence';
-import { JumpList, type Place } from './jump-list';
+import type { Place } from './jump-list';
+import { KeyScroller } from './key-scroll';
 
 /** Whether the focus is where a key types (an input, a comment, the editor), so reader keys leave it alone. */
 export function typing(): boolean {
@@ -26,14 +27,22 @@ interface ScopeKey {
  */
 export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 	const actions: Record<ReaderKeyAction, (v: DocumentView) => void> = {
-		'scroll-down': (v) => scroll(v, 0.15),
-		'scroll-up': (v) => scroll(v, -0.15),
-		'page-down': (v) => scroll(v, 0.5),
-		'page-up': (v) => scroll(v, -0.5),
+		'scroll-down': (v) => scroll(v, 0.15, 1.2),
+		'scroll-up': (v) => scroll(v, -0.15, 1.2),
+		'page-down': (v) => scroll(v, 0.5, 2.5),
+		'page-up': (v) => scroll(v, -0.5, 2.5),
+		'screen-down': (v) => scroll(v, 0.9, 4),
+		'screen-up': (v) => scroll(v, -0.9, 4),
 		'set-mark': (v) => (awaiting = { action: 'set-mark', view: v }),
 		'go-to-mark': (v) => (awaiting = { action: 'go-to-mark', view: v }),
-		top: (v) => v.reader!.scrollToEdge('start'),
-		bottom: (v) => v.reader!.scrollToEdge('end'),
+		top: (v) => {
+			scroller.stop();
+			v.reader!.scrollToEdge('start');
+		},
+		bottom: (v) => {
+			scroller.stop();
+			v.reader!.scrollToEdge('end');
+		},
 		'jump-back': (v) => travel(v, -1),
 		'jump-forward': (v) => travel(v, 1),
 		search: (v) => {
@@ -47,48 +56,28 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 			v.sidebar.setKeyMode(null);
 			v.toggleSidebar();
 		},
+		'open-file': () => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:open-file`),
 		comments: () => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:toggle-margin-comments`),
 	};
-	const scroll = (v: DocumentView, screens: number) => {
+	const scroller = new KeyScroller();
+	/** By `screens` of the view (a held key: on at `speed` screens a second). */
+	const scroll = (v: DocumentView, screens: number, speed: number) => {
 		const el = v.reader!.scroller;
-		el.scrollBy({ top: Math.round(el.clientHeight * screens), behavior: 'smooth' });
+		scroller.press(el, Math.round(el.clientHeight * screens), repeat, el.clientHeight * speed);
 	};
+	/** Whether the key being handled is a held key's repeat */
+	let repeat = false;
 
 	// Marks: a–z per document, A–Z across documents, ' (or `) where the view was before its last jump
-	const here = (v: DocumentView): Place | null => {
-		const locator = v.reader?.getLocation()?.locator;
-		return v.file && locator ? { path: v.file.path, locator } : null;
-	};
-	const lastJump = new WeakMap<DocumentView, Place>();
-	/** Vim's jump list, per view (across the documents it shows). */
-	const jumps = new WeakMap<DocumentView, JumpList>();
-	const jumpList = (v: DocumentView) => {
-		let j = jumps.get(v);
-		if (!j) jumps.set(v, (j = new JumpList()));
-		return j;
-	};
-	/** Before a jump (g g, G, a mark, a search result, the outline): where `''` and Ctrl+O go back to. */
-	const rememberJump = (v: DocumentView) => {
-		const place = here(v);
-		if (!place) return;
-		lastJump.set(v, place);
-		jumpList(v).jumpedFrom(place);
-	};
-	const show = (v: DocumentView, target: Place) => {
-		if (target.path === v.file?.path) return void v.navigate(target.locator, false);
-		const file = plugin.app.vault.getAbstractFileByPath(target.path);
-		if (!(file instanceof TFile)) return plugin.notice(`${target.path} is gone.`);
-		void v.leaf.openFile(file, { eState: { position: target.locator } });
-	};
+	const rememberJump = (v: DocumentView) => v.recordJump();
 	const jumpTo = (v: DocumentView, target: Place) => {
-		rememberJump(v);
-		show(v, target);
+		v.recordJump();
+		void v.showPlace(target);
 	};
-	/** Ctrl+O (`by` -1) / Ctrl+I (1): back and forth through the jump list. */
+	/** Ctrl+O (`by` -1) / Ctrl+I (1): back and forth through the view's jump list. */
 	const travel = (v: DocumentView, by: number) => {
-		const j = jumpList(v);
-		const target = by < 0 ? j.back(here(v)) : j.forward();
-		if (target) show(v, target);
+		const target = by < 0 ? v.jumps.back(v.here()) : v.jumps.forward();
+		if (target) void v.showPlace(target);
 	};
 	const setMark = (v: DocumentView, name: string) => {
 		const locator = v.reader?.getLocation()?.locator;
@@ -104,7 +93,7 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		const s = plugin.settings;
 		const target =
 			name === "'" || name === '`'
-				? lastJump.get(v)
+				? v.lastJump
 				: name === name.toLowerCase()
 					? ((locator) => locator && { path: v.file!.path, locator })(s.marks[v.file.path]?.[name])
 					: s.globalMarks[name];
@@ -157,7 +146,6 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 			if (chord === 'l' || chord === 'ArrowRight') return () => sidebar.foldTocCursor(true);
 			if (chord === 'Enter')
 				return () => {
-					rememberJump(v);
 					sidebar.openTocCursor();
 					v.backToText();
 				};
@@ -175,6 +163,7 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		if (!s.numberKeyColors && !s.readerKeysEnabled) return;
 		const chord = chordOf(e);
 		if (!chord) return; // a modifier on its own: a sequence goes on
+		repeat = e.repeat;
 		const v = plugin.activeView();
 		if (!v?.reader || typing() || activeDocument.querySelector('body > .modal-container, body > .menu, body > .suggestion-container')) return clearPending();
 		if (awaiting) {
@@ -221,6 +210,10 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		clearPending();
 		root.unregister(entry);
 	});
+	// A held scroll key goes up: stop
+	plugin.registerDomEvent(document, 'keyup', () => scroller.release(), { capture: true });
+	plugin.registerDomEvent(window, 'blur', () => scroller.release());
+	plugin.register(() => scroller.stop());
 	// Clicking anywhere leaves the outline's or the results' key mode, and forgets a half-typed sequence.
 	plugin.registerDomEvent(document, 'mousedown', () => {
 		clearPending();

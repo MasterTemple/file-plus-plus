@@ -3,6 +3,7 @@ import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, parseLink
 import { around } from './patch';
 import { shareHotkeys } from './hotkeys';
 import { registerReaderKeys, typing } from './keys';
+import { OpenFileModal } from './open-file';
 import { hoverLink } from './hover';
 import { resolveFile, type HighlightEntry } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
@@ -852,6 +853,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		registerReaderKeys(this as unknown as FilePlusPlusPlugin);
 		for (let i = 1; i <= 9; i++) colorCommand(`color-${i}`, `Use highlight color ${i} (palette order)`, () => this.settings.palette[i - 1]);
 		colorCommand('color-none', 'Use no highlight color', () => null);
+		this.addCommand({ id: 'open-file', name: `Open ${this.format.name} file…`, callback: () => new OpenFileModal(this.app, this as unknown as FilePlusPlusPlugin).open() });
 		this.addCommand({ id: 'appearance', name: 'Reading appearance', checkCallback: withView((v) => v.toggleAppearance()) });
 		this.addCommand({ id: 'font-increase', name: 'Increase font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.min(48, this.readerSettings(v.file?.path).fontSize + 1) })) });
 		this.addCommand({ id: 'font-decrease', name: 'Decrease font size', checkCallback: withView((v) => this.updateReaderSettingsFor(v.file?.path, { fontSize: Math.max(8, this.readerSettings(v.file?.path).fontSize - 1) })) });

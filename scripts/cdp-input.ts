@@ -1,6 +1,6 @@
 /**
  * Send real mouse input through CDP (Input.dispatchMouseEvent), then print an expression's value.
- *   bun scripts/cdp-input.ts --port 9333 --click x,y[,mods] | --dblclick x,y | --clicks x,y,n | --drag x1,y1,x2,y2 [--eval "js"]
+ *   bun scripts/cdp-input.ts --port 9333 --click x,y[,mods] | --dblclick x,y | --clicks x,y,n | --drag x1,y1,x2,y2 | --key ctrl+c | --key-hold j,1000 [--eval "js"]
  */
 const args = process.argv.slice(2);
 const opt = (k: string) => {
@@ -104,6 +104,20 @@ if (rc) {
 	const [x, y] = rc.split(',').map(Number);
 	await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'right', buttons: 2, clickCount: 1 });
 	await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'right', buttons: 0, clickCount: 1 });
+}
+const keyHold = opt('--key-hold'); // k,ms: a letter held down (the OS's repeats: after 300 ms, every 33 ms)
+if (keyHold) {
+	const [k, ms] = keyHold.split(',');
+	const upper = k !== k.toLowerCase();
+	const base = { key: k, code: `Key${k.toUpperCase()}`, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0), modifiers: upper ? 8 : 0 };
+	await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: k });
+	const end = Date.now() + Number(ms);
+	await Bun.sleep(300);
+	while (Date.now() < end) {
+		await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: k, autoRepeat: true });
+		await Bun.sleep(33);
+	}
+	await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
 }
 const key = opt('--key'); // e.g. ctrl+c
 if (key) {

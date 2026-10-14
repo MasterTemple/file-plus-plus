@@ -430,6 +430,7 @@ export class Sidebar {
 
 	/** `fromClick`: a result was tapped, so a drawer-style sidebar gets out of the way. */
 	private select(i: number, fromClick = false): void {
+		if (fromClick) this.view.recordJump();
 		this.current = i;
 		this.view.reader?.showSearchResults(this.results, i);
 		this.searchInfo.setText(`${i + 1} / ${this.results.length}`);
@@ -903,6 +904,7 @@ class ProviderPanel {
 	}
 
 	private select(i: number, fromClick = false): void {
+		if (fromClick) this.view.recordJump();
 		this.current = i;
 		this.updateInfo();
 		if (i >= this.rendered) this.renderMore(i - this.rendered + 50);
@@ -913,7 +915,7 @@ class ProviderPanel {
 		const row = this.listEl?.querySelector(`[data-index="${i}"]`) as HTMLElement | null;
 		row?.addClass('is-active');
 		row?.scrollIntoView({ block: 'nearest' });
-		this.view.navigate(this.shown[i].spec.locator);
+		this.view.navigate(this.shown[i].spec.locator, true, fromClick);
 		if (fromClick && this.view.sidebarIsOverlay()) this.view.toggleSidebar(false, false);
 	}
 }

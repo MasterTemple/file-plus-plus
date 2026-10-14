@@ -11,6 +11,7 @@ import { AnnotationTip } from './annotation-tip';
 import { MarginComments, type ProviderNotes } from '../annotator/margin-comments';
 import { layerId, type Annotation, type AnnotationContext, type AnnotationProvider } from './api';
 import { hoverLink } from './hover';
+import { JumpList, type Place } from './jump-list';
 
 /** Annotations under the pointer, grouped by their provider. */
 interface AnnotationGroup {
@@ -48,6 +49,14 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	/** @internal (the annotator) */
 	providerNotes = new Map<string, ProviderNotes>();
 	private appearance!: AppearancePanel;
+	/** Vim's jump list (reader keys' Ctrl+O / Ctrl+I), across the documents this view shows. */
+	readonly jumps = new JumpList();
+	/** Where the view was before its last jump (reader keys' `''`). */
+	lastJump: Place | null = null;
+	/** Going through the jump list: leaving a document then isn't a jump. */
+	private travelling = false;
+	/** The pending subpath is a link's (a jump), not a position restored from history. */
+	private pendingJump = false;
 	private pendingSubpath: string | null = null;
 	/** Whether the pending jump flashes its passage (a link does; a position restored from history doesn't). */
 	private pendingFlash = true;
@@ -232,6 +241,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 				defaultColor: s.defaultColor,
 				highlightOpacity: s.highlightOpacity,
 				flash: { color: s.jumpHighlightColor, duration: s.jumpHighlightDuration },
+				// A link inside the document is a jump
+				onInternalLink: () => {
+					this.recordJump();
+					return false;
+				},
 			});
 			this.document = doc;
 			this.reader = reader;
@@ -250,9 +264,12 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			for (const p of this.plugin.providers.values()) void this.updateProvider(p);
 			this.onReaderReady(reader);
 			const pending = this.pendingSubpath;
-			const target = pending ?? s.positions[file.path];
+			const saved = s.positions[file.path];
+			const target = pending ?? saved;
 			this.pendingSubpath = null;
-			if (target) this.navigate(target, !!pending && this.pendingFlash && target !== s.positions[file.path]);
+			// Opened by a link: the jump list starts where the document would have opened by itself
+			if (pending && this.pendingJump) this.recordJump(saved ? { path: file.path, locator: saved } : undefined);
+			if (target) this.navigate(target, !!pending && this.pendingFlash && target !== saved, false);
 		} catch (e) {
 			console.error('[fpp] failed to open', file.path, e);
 			const name = this.plugin.format.name;
@@ -267,6 +284,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	}
 
 	override async onUnloadFile(_file: TFile): Promise<void> {
+		// Another document in this tab: a jump (unless going through the jump list)
+		if (this.reader?.isRendered) this.recordJump();
 		this.loadToken++;
 		this.teardown();
 	}
@@ -317,24 +336,30 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		// A link's subpath wins; otherwise a position from history is restored without a flash.
 		const target = s?.subpath || (typeof s?.position === 'string' ? s.position : null);
 		if (target) {
-			if (this.reader?.isRendered) this.navigate(target, !!s?.subpath);
+			if (this.reader?.isRendered) this.navigate(target, !!s?.subpath, !!s?.subpath);
 			else {
 				this.pendingSubpath = target;
 				this.pendingFlash = !!s?.subpath;
+				this.pendingJump = !!s?.subpath;
 			}
 		}
 		super.setEphemeralState(state);
 	}
 
-	/** Jump to a subpath (`#<locator>&color=..`); range locators flash (per settings) unless `flash` is false. */
-	navigate(subpath: string, flash = true): boolean {
+	/**
+	 * Jump to a subpath (`#<locator>&color=..`); range locators flash (per settings) unless `flash` is
+	 * false. With `record`, where the view was goes on its jump list.
+	 */
+	navigate(subpath: string, flash = true, record = true): boolean {
 		if (!this.reader) {
 			this.pendingSubpath = subpath;
 			this.pendingFlash = flash;
+			this.pendingJump = record;
 			return false;
 		}
 		const loc = this.reader.parse(subpath);
 		if (!loc.locator) return false;
+		if (record) this.recordJump();
 		const ok = this.reader.goTo(loc.locator, { flash: flash && this.reader.isRangeLocator(loc.locator) && this.plugin.jumpFlash() });
 		if (!ok) console.warn('[fpp] could not resolve', subpath);
 		else this.onNavigate(loc.locator);
@@ -378,7 +403,34 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	/** `source` changed while the document stayed open (on a new document, `onReaderReady` sees the new one). */
 	protected onSourceChange(): void {}
 
+	/** Where the view is: its document and the reading position. */
+	here(): Place | null {
+		const locator = this.reader?.isRendered ? this.reader.getLocation()?.locator : null;
+		return this.file && locator ? { path: this.file.path, locator } : null;
+	}
+
+	/** About to jump from `place` (where the view is): Ctrl+O and `''` come back to it. */
+	recordJump(place: Place | null = this.here()): void {
+		if (!place || this.travelling) return;
+		this.lastJump = place;
+		this.jumps.jumpedFrom(place);
+	}
+
+	/** Show a place, in this document or (opening it here) another, without recording a jump. */
+	async showPlace(place: Place): Promise<void> {
+		if (place.path === this.file?.path) return void this.navigate(place.locator, false, false);
+		const file = this.app.vault.getAbstractFileByPath(place.path);
+		if (!(file instanceof TFile)) return void this.plugin.notice(`${place.path} is gone.`);
+		this.travelling = true;
+		try {
+			await this.leaf.openFile(file, { eState: { position: place.locator } });
+		} finally {
+			this.travelling = false;
+		}
+	}
+
 	goToToc(item: TocItem): void {
+		this.recordJump();
 		this.reader?.goTo(item);
 		if (this.sidebarIsOverlay()) this.toggleSidebar(false, false);
 	}
