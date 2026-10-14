@@ -5,7 +5,8 @@
  * it with the viewer.
  */
 export { HighlightIndex, resolveFile, type HighlightEntry } from './highlight-index';
-export { Annotations } from './annotations';
+export { Annotations, type FolderMove } from './annotations';
+export { AnnotationFolderModal } from './annotation-folder';
 export * from './annotation-utils';
 export * from './comment-utils';
 export { askForComment, confirmDeleteHighlight } from './comment-modal';

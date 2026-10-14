@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parseLinktext } from './linktext';
-import { findPlacement, headingLabel, insertAnnotation, insertAt, type Ordering } from '../src/annotator/annotation-utils';
+import { findPlacement, headingLabel, insertAnnotation, insertAt, mergeAnnotationText, type Ordering } from '../src/annotator/annotation-utils';
 import { linksIn } from '../src/obsidian/link-utils';
 
 // A toy format: `#n=<number>` locators, ordered by number. Text fragments resolve through `tf`.
@@ -84,5 +84,62 @@ describe('annotation placement', () => {
 	test('insertAt spacing', () => {
 		expect(insertAt(['a', '', '', 'b'], 3, 'X')).toEqual(['a', '', 'X', '', 'b']);
 		expect(insertAt(['a'], 1, 'X')).toEqual(['a', '', 'X', '']);
+	});
+});
+
+describe('merging annotation files', () => {
+	const other = `---
+doc: "[[a.doc]]"
+doc-annotation-mode: insert
+---
+
+Intro note.
+
+# [[a.doc#n=100|Part 1]]
+
+> [!quote] [[a.doc#n=110|a]]
+> one
+
+> [!quote] [[a.doc#n=120|a]]
+> two
+
+A thought about part 1.
+
+# [[a.doc#n=200|Part 2]]
+
+> [!quote] [[a.doc#n=210|a]]
+> four
+
+# Extra
+
+Only in the other file.
+`;
+
+	test('new blocks go to their places, duplicates are skipped', () => {
+		const out = mergeAnnotationText(file, other, order());
+		const lines = out.split('\n');
+		expect(out.match(/> one/g)?.length).toBe(1);
+		const two = lines.indexOf('> two');
+		expect(lines[two - 3]).toBe('> one');
+		expect(lines[two + 2]).toBe('> [!quote] [[a.doc#n=130|a]]');
+		expect(out).toContain('# [[a.doc#n=200|Part 2]]\n\n> [!quote] [[a.doc#n=210|a]]\n> four\n\n# [[a.doc#n=300|Part 3]]');
+	});
+
+	test('blocks without a position go to the section with the same heading', () => {
+		const out = mergeAnnotationText(file, other, order());
+		expect(out).toContain('> three\n\nA thought about part 1.\n\n# [[a.doc#n=200|Part 2]]');
+		expect(out).toContain('---\n\nIntro note.\n\n# [[a.doc#n=100|Part 1]]');
+		expect(out.trimEnd().endsWith('Some loose note without a link.\n\n# Extra\n\nOnly in the other file.')).toBe(true);
+	});
+
+	test('frontmatter keys only the other file has are added', () => {
+		const out = mergeAnnotationText(file, other, order());
+		expect(out.startsWith('---\ndoc: "[[a.doc]]"\ndoc-annotation-mode: insert\n---\n')).toBe(true);
+	});
+
+	test('merging a file into itself changes nothing', () => {
+		expect(mergeAnnotationText(file, file, order())).toBe(file);
+		const once = mergeAnnotationText(file, other, order());
+		expect(mergeAnnotationText(once, other, order())).toBe(once);
 	});
 });

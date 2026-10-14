@@ -1,4 +1,5 @@
 import { PluginSettingTab, Setting, debounce, type App } from 'obsidian';
+import { AnnotationFolderModal } from '../annotator/annotation-folder';
 import { buildAppearanceControls, globalAppearance } from './appearance';
 import type { FilePlusPlusPlugin } from './plugin';
 import { card, md, section, Tabs, type Section, type TabSpec } from './settings-kit';
@@ -614,7 +615,7 @@ export class FppSettingTab extends PluginSettingTab {
 			);
 		new Setting(files.items)
 			.setName('Folder for new annotation files')
-			.setDesc(`Leave empty to create them next to the ${noun}.`)
+			.setDesc(`Leave empty to create them next to the ${noun}. To move existing annotation files too, use Move…`)
 			.addText((t) =>
 				t
 					.setPlaceholder('e.g. Reading/Annotations')
@@ -623,7 +624,8 @@ export class FppSettingTab extends PluginSettingTab {
 						s.annotationFolder = v;
 						await save();
 					}),
-			);
+			)
+			.addButton((b) => b.setButtonText('Move…').onClick(() => new AnnotationFolderModal(this.app, this.plugin as never, () => this.display()).open()));
 		new Setting(files.items)
 			.setName('File name')
 			.setDesc(md('Variables: `{{title}}`, `{{author}}`, `{{file}}`.'))

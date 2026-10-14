@@ -34,6 +34,7 @@ src/annotator/  the note-taking layer (`file-plus-plus/annotator`): links in not
   annotator.ts  Annotator (`plugin.annotator`): the highlight index and its events, highlight actions (open source, comment, color, delete), copying and templates, annotation files, saving provider annotations, Backlinks hover, its commands
   view-annotator.ts  ViewAnnotator (`view.annotations`): drawing highlights, margin comments, the highlight menu, comment editing, mobile gestures on highlights, the copy/insert row
   highlight-index.ts, annotations.ts (annotation files), comment-*.ts, margin-comments.ts
+  annotation-folder.ts  AnnotationFolderModal: *Change annotation folder…* (`annotations.planMove` / `move`: renames, then `mergeAnnotationText` for a document's extra files, `retargetLinks` for links to them)
   import.ts     ImportModal + importHighlights: JSON → annotation files (opens each document's view to resolve passages, dedupes by resolved passage + comment); parsing in import-utils.ts (pure)
   notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)
 build/plugin.ts buildPlugin(): esbuild + prefix rewrite + styles.css (library's, then the plugin's)

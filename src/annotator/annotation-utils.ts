@@ -153,3 +153,78 @@ export function insertAnnotation<K>(data: string, sel: K, block: string, order: 
 	const placement = findPlacement(lines, sel, order);
 	return { data: insertAt(lines, placement.line, block).join('\n'), placement };
 }
+
+/** Top-level keys of YAML frontmatter lines (`key:` at the start of a line). */
+function frontmatterEntries(lines: string[]): { key: string; lines: string[] }[] {
+	const out: { key: string; lines: string[] }[] = [];
+	for (const line of lines) {
+		const m = /^([^\s#-][^:]*):/.exec(line);
+		if (m) out.push({ key: m[1].trim(), lines: [line] });
+		else if (out.length) out[out.length - 1].lines.push(line);
+	}
+	return out;
+}
+
+/**
+ * Merge annotation file `other` into `base` (both texts of annotation files of one document): blocks
+ * of `other` not already in `base` (same text) go to their place by position, or, without one, to the
+ * end of the section with the same heading (the end of the file when `base` has none, under that
+ * heading). Frontmatter keys only `other` has are added. Returns `base` unchanged when nothing is new.
+ */
+export function mergeAnnotationText<K>(base: string, other: string, order: Ordering<K>): string {
+	let lines = base.split('\n');
+	const otherLines = other.split('\n');
+	const baseFm = frontmatterEnd(lines);
+	const otherFm = frontmatterEnd(otherLines);
+
+	// Frontmatter: keys of `other` that `base` lacks.
+	if (otherFm) {
+		const have = new Set(frontmatterEntries(lines.slice(1, baseFm - 1)).map((e) => e.key));
+		const extra = frontmatterEntries(otherLines.slice(1, otherFm - 1)).filter((e) => !have.has(e.key)).flatMap((e) => e.lines);
+		if (extra.length) lines = baseFm ? [...lines.slice(0, baseFm - 1), ...extra, ...lines.slice(baseFm - 1)] : ['---', ...extra, '---', ...lines];
+	}
+
+	const norm = (text: string) => text.trim().replace(/[ \t]+$/gm, '');
+	const existing = new Set(blocksIn(lines, frontmatterEnd(lines), lines.length).map((b) => norm(b.text)));
+	const isHeading = (b: Block) => /^#{1,6}\s/.test(b.text) && !b.text.includes('\n');
+
+	// The blocks of `other`, each with the label of its section (null: before the first heading).
+	const headings = parseHeadings(otherLines, otherFm);
+	const sections: { label: string | null; heading: string | null; from: number; to: number }[] = [
+		{ label: null, heading: null, from: otherFm, to: headings[0]?.line ?? otherLines.length },
+		...headings.map((h, i) => ({ label: headingLabel(h.text), heading: otherLines[h.line], from: h.line + 1, to: headings[i + 1]?.line ?? otherLines.length })),
+	];
+	/** Sections `base` lacks, appended at the end: heading line and blocks. */
+	const added = new Map<string, string[]>();
+	for (const section of sections) {
+		for (const block of blocksIn(otherLines, section.from, section.to)) {
+			const text = norm(block.text);
+			if (isHeading(block) || existing.has(text)) continue;
+			existing.add(text);
+			const key = order.keyOf(text);
+			if (key !== null) {
+				lines = insertAnnotation(lines.join('\n'), key, text, order).data.split('\n');
+				continue;
+			}
+			const own = parseHeadings(lines, frontmatterEnd(lines));
+			let at: number | null = null;
+			if (section.label === null) at = own[0]?.line ?? lines.length;
+			else {
+				const i = own.findIndex((h) => headingLabel(h.text) === section.label);
+				if (i !== -1) {
+					// After the section's last block.
+					at = own[i + 1]?.line ?? lines.length;
+					while (at > own[i].line + 1 && lines[at - 1].trim() === '') at--;
+				}
+			}
+			if (at !== null) lines = insertAt(lines, at, text);
+			else {
+				const list = added.get(section.heading!) ?? [];
+				list.push(text);
+				added.set(section.heading!, list);
+			}
+		}
+	}
+	for (const [heading, blocks] of added) lines = insertAt(lines, lines.length, [heading, ...blocks].join('\n\n'));
+	return lines.join('\n');
+}

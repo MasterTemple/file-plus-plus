@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { parseLocator, textFragmentScheme } from '../src/core';
-import { formatLink, linkAt, linksIn, linkTimestamp, parseLinkTimestamp, renderTemplate, setCalloutColor, setLinkColor, setLinkParam, touchLink } from '../src/obsidian/link-utils';
+import { formatLink, linkAt, retargetLinks, linksIn, linkTimestamp, parseLinkTimestamp, renderTemplate, setCalloutColor, setLinkColor, setLinkParam, touchLink } from '../src/obsidian/link-utils';
 
 const cfi = 'epubcfi(/6/14!/4/2,/1:0,/1:16)';
 
@@ -79,4 +79,10 @@ test('linkAt', () => {
 
 test('linksIn', () => {
 	expect(linksIn('a [[x.doc#n=1|y]] b [c](x%20y.doc#n=2) d [e](https://example.com) ![[z.doc]]')).toEqual(['x.doc#n=1', 'x y.doc#n=2', 'z.doc']);
+});
+
+test('retargetLinks', () => {
+	const is = (p: string) => p === 'Old notes' || p === 'dir/Old notes';
+	expect(retargetLinks('See [[Old notes]], ![[dir/Old notes#Part 1|x]] and [[Other]].', is, 'New')).toBe('See [[New]], ![[New#Part 1|x]] and [[Other]].');
+	expect(retargetLinks('[a](Old%20notes.md#Part%201) [b](<Old notes>) [c](https://x.org/Old%20notes)', is, 'New name')).toBe('[a](New%20name.md#Part%201) [b](<New name>) [c](https://x.org/Old%20notes)');
 });

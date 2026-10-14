@@ -5,6 +5,7 @@ import { linkTimestamp, renderTemplate, setCalloutColor, setLinkColor, touchLink
 import type { CopyTarget, FilePlusPlusPlugin } from '../obsidian/plugin';
 import { COMMENT_TEMPLATE, needsComment, type AnnotationMode, type CopyAction } from '../obsidian/settings';
 import type { DocumentView } from '../obsidian/view';
+import { AnnotationFolderModal } from './annotation-folder';
 import { Annotations } from './annotations';
 import { askForComment, confirmDeleteHighlight } from './comment-modal';
 import { getComment, removeHighlight, setComment } from './comment-utils';
@@ -69,6 +70,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 
 	private registerCommands(): void {
 		this.plugin.addCommand({ id: 'annotation-file', name: 'Open or create annotation file', checkCallback: this.plugin.withViewCommand((v) => this.openAnnotationFile(v)) });
+		this.plugin.addCommand({ id: 'annotation-folder', name: 'Change annotation folder…', callback: () => new AnnotationFolderModal(this.plugin.app, this.plugin as unknown as FilePlusPlusPlugin).open() });
 		this.plugin.addCommand({ id: 'import-json', name: 'Import highlights from JSON…', callback: () => new ImportModal(this.plugin.app, this.plugin as unknown as FilePlusPlusPlugin).open() });
 		// A .json file's menu offers to import it.
 		this.plugin.registerEvent(

@@ -183,3 +183,25 @@ export function linksIn(text: string): string[] {
 	}
 	return out.sort((a, b) => a.at - b.at).map((l) => l.link);
 }
+
+/**
+ * Point wiki and markdown links whose path `matches` at `linktext` instead, keeping their subpath,
+ * alias and embedding.
+ */
+export function retargetLinks(text: string, matches: (path: string) => boolean, linktext: string): string {
+	text = text.replace(/(!?\[\[)([^\]|#]*)([^\]]*\]\])/g, (all, open: string, path: string, rest: string) => (path && matches(path) ? open + linktext + rest : all));
+	return text.replace(/(!?\[(?:\\.|[^\]\\])*\]\()(<[^>\n]*>|[^)\s]*)/g, (all, open: string, dest: string) => {
+		const angle = dest.startsWith('<');
+		const raw = angle ? dest.slice(1, -1) : dest;
+		const hash = raw.indexOf('#');
+		const path = hash === -1 ? raw : raw.slice(0, hash);
+		let decoded = path;
+		try {
+			decoded = decodeURI(path);
+		} catch {}
+		if (!path || /^[a-z][a-z0-9+.-]*:/i.test(path) || !(matches(decoded) || matches(decoded.replace(/\.md$/, '')))) return all;
+		const rest = hash === -1 ? '' : raw.slice(hash);
+		const next = (angle ? linktext : mdEncode(linktext)) + (/\.md$/.test(decoded) && !/\.md$/.test(linktext) ? '.md' : '');
+		return open + (angle ? `<${next}${rest}>` : next + rest);
+	});
+}
