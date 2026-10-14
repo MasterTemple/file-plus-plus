@@ -37,6 +37,8 @@ export const READER_KEY_ACTIONS = [
 	{ id: 'bottom', key: 'G', name: 'Go to the end', desc: 'In the outline and the search results: the last entry.' },
 	{ id: 'set-mark', key: 'm', name: 'Set a mark', desc: 'Then a letter: a–z in this document, A–Z across documents.' },
 	{ id: 'go-to-mark', key: "'", name: 'Go to a mark', desc: "Then its letter, or ' for where you were before the last jump." },
+	{ id: 'jump-back', key: 'Ctrl+o', name: 'Back in the jump list', desc: 'Places jumped from (g g, G, marks, search, the outline), in this view, across documents.' },
+	{ id: 'jump-forward', key: 'Ctrl+i', name: 'Forward in the jump list' },
 	{ id: 'search', key: '/', name: 'Search', desc: 'In the search box, Ctrl+N / Ctrl+P go to the next / previous result, and Enter moves into the results: the scroll keys move, Enter goes there, / back to the box.' },
 	{ id: 'next-result', key: 'n', name: 'Next search result' },
 	{ id: 'prev-result', key: 'N', name: 'Previous search result' },

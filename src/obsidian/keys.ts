@@ -3,6 +3,7 @@ import type { FilePlusPlusPlugin } from './plugin';
 import type { DocumentView } from './view';
 import type { ReaderKeyAction } from './settings';
 import { chordOf, parseBinding, SequenceMatcher } from './key-sequence';
+import { JumpList, type Place } from './jump-list';
 
 /** Whether the focus is where a key types (an input, a comment, the editor), so reader keys leave it alone. */
 export function typing(): boolean {
@@ -31,8 +32,10 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'page-up': (v) => scroll(v, -0.5),
 		'set-mark': (v) => (awaiting = { action: 'set-mark', view: v }),
 		'go-to-mark': (v) => (awaiting = { action: 'go-to-mark', view: v }),
-		top: (v) => v.reader!.scroller.scrollTo({ top: 0, behavior: 'smooth' }),
-		bottom: (v) => v.reader!.scroller.scrollTo({ top: v.reader!.scroller.scrollHeight, behavior: 'smooth' }),
+		top: (v) => v.reader!.scroller.scrollTo({ top: 0 }),
+		bottom: (v) => v.reader!.scroller.scrollTo({ top: v.reader!.scroller.scrollHeight }),
+		'jump-back': (v) => travel(v, -1),
+		'jump-forward': (v) => travel(v, 1),
 		search: (v) => {
 			v.sidebar.setKeyMode(null);
 			v.openSearch();
@@ -52,18 +55,40 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 	};
 
 	// Marks: a–z per document, A–Z across documents, ' (or `) where the view was before its last jump
-	const lastJump = new WeakMap<DocumentView, { path: string; locator: string }>();
-	/** Before a jump (g g, G, a mark, a search result, the outline): where `''` goes back to. */
-	const rememberJump = (v: DocumentView) => {
+	const here = (v: DocumentView): Place | null => {
 		const locator = v.reader?.getLocation()?.locator;
-		if (v.file && locator) lastJump.set(v, { path: v.file.path, locator });
+		return v.file && locator ? { path: v.file.path, locator } : null;
 	};
-	const jumpTo = (v: DocumentView, target: { path: string; locator: string }) => {
-		rememberJump(v);
+	const lastJump = new WeakMap<DocumentView, Place>();
+	/** Vim's jump list, per view (across the documents it shows). */
+	const jumps = new WeakMap<DocumentView, JumpList>();
+	const jumpList = (v: DocumentView) => {
+		let j = jumps.get(v);
+		if (!j) jumps.set(v, (j = new JumpList()));
+		return j;
+	};
+	/** Before a jump (g g, G, a mark, a search result, the outline): where `''` and Ctrl+O go back to. */
+	const rememberJump = (v: DocumentView) => {
+		const place = here(v);
+		if (!place) return;
+		lastJump.set(v, place);
+		jumpList(v).jumpedFrom(place);
+	};
+	const show = (v: DocumentView, target: Place) => {
 		if (target.path === v.file?.path) return void v.navigate(target.locator, false);
 		const file = plugin.app.vault.getAbstractFileByPath(target.path);
 		if (!(file instanceof TFile)) return plugin.notice(`${target.path} is gone.`);
 		void v.leaf.openFile(file, { eState: { position: target.locator } });
+	};
+	const jumpTo = (v: DocumentView, target: Place) => {
+		rememberJump(v);
+		show(v, target);
+	};
+	/** Ctrl+O (`by` -1) / Ctrl+I (1): back and forth through the jump list. */
+	const travel = (v: DocumentView, by: number) => {
+		const j = jumpList(v);
+		const target = by < 0 ? j.back(here(v)) : j.forward();
+		if (target) show(v, target);
 	};
 	const setMark = (v: DocumentView, name: string) => {
 		const locator = v.reader?.getLocation()?.locator;
