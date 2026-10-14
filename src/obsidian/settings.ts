@@ -157,6 +157,9 @@ export interface FppSettings {
 /** Asks for a comment: the quote is nested inside the callout, the comment follows it. */
 export const COMMENT_TEMPLATE = '> [!quote|{{color}}] {{link}}\n> > {{text}}\n>\n> {{comment}}';
 
+/** The selection highlighted in its sentence (or, for whole sentences, with the ones around them). */
+export const CONTEXT_FORMAT: CopyFormat = { id: 'context', name: 'Highlight in context', template: '> [!quote|{{color}}] {{link}}\n> {{context}}' };
+
 export const SELECTION_MENU_LABELS: Record<string, string> = {
 	link: 'Link Only',
 	'alt-link': 'Alternate Link',
@@ -213,6 +216,7 @@ export const DEFAULT_SETTINGS: FppSettings = {
 		{ id: 'quote', name: 'Quote', template: '> {{text}}\n\n{{link}}' },
 		{ id: 'callout-comment', name: 'Callout with comment', template: COMMENT_TEMPLATE },
 		{ id: 'text-with-link', name: 'Text with link', template: '{{text}} ({{link}})' },
+		CONTEXT_FORMAT,
 	],
 	annotationFolder: '',
 	annotationFileName: '{{book}} - Annotations',
@@ -226,7 +230,7 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	highlightHold: 'menu',
 	selectionMenu: [],
 	highlightMenu: [],
-	settingsVersion: 4,
+	settingsVersion: 5,
 	copyAction: 'text',
 	saveAnnotationAs: 'format:callout',
 	hiddenProviders: [],

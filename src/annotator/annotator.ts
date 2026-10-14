@@ -1,5 +1,5 @@
 import { MarkdownView, Notice, Platform, TFile } from 'obsidian';
-import type { DocumentReader, SelectionInfo } from '../core';
+import { highlightInContext, type DocumentReader, type SelectionInfo } from '../core';
 import type { Annotation } from '../obsidian/api';
 import { linkTimestamp, renderTemplate, setCalloutColor, setLinkColor, touchLink, UPDATED_PARAM } from '../obsidian/link-utils';
 import type { CopyTarget, FilePlusPlusPlugin } from '../obsidian/plugin';
@@ -328,6 +328,16 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		}
 	}
 
+	/** The selection marked `==…==` in its sentences (`{{context}}`) */
+	contextText(info: SelectionInfo): string {
+		try {
+			return highlightInContext(info.context());
+		} catch (e) {
+			console.warn('[fpp] context failed', e);
+			return `==${info.text.trim()}==`;
+		}
+	}
+
 	templateVars(view: DocumentView<Doc, R>, info: SelectionInfo, color: string | null, link: string): Record<string, string> {
 		const doc = view.document;
 		const meta = doc && view.file ? this.plugin.format.info(doc, view.file) : null;
@@ -361,7 +371,9 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	renderCopy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, comment = '', extra: Record<string, string> = {}, updated?: Date | null): string {
 		if (what === 'text') return this.selectionText(info);
 		const link = this.buildLink(view, info, color, what === 'alt-link', extra, updated);
-		return typeof what === 'string' ? link : renderTemplate(what.template, { ...this.templateVars(view, info, color, link), ...extra, comment });
+		if (typeof what === 'string') return link;
+		const context = what.template.includes('{{context}}') ? this.contextText(info) : '';
+		return renderTemplate(what.template, { ...this.templateVars(view, info, color, link), context, ...extra, comment });
 	}
 
 	/** True when copying with this target first asks for a comment ({{comment}} in the template). */

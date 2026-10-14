@@ -20,8 +20,9 @@ export {
 	type RenderedSection,
 	type SearchResult,
 	type SelectionInfo,
+	type SelectionContext,
 } from './reader';
 export * from './settings';
-export { rangeToMarkdown } from './markdown';
-export { sentenceBounds, sentenceRange } from './sentences';
+export { highlightInContext, rangeToMarkdown } from './markdown';
+export { sentenceBounds, sentenceContext, sentenceEndAt, sentenceRange, sentenceStartAt } from './sentences';
 export { Margin, type MarginNote, type MarginOptions } from './margin';

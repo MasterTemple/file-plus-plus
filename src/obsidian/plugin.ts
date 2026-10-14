@@ -5,7 +5,7 @@ import { shareHotkeys } from './hotkeys';
 import { hoverLink } from './hover';
 import { resolveFile, type HighlightEntry } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
-import { COMMENT_TEMPLATE, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type LinkPlace, type OpenTarget } from './settings';
+import { COMMENT_TEMPLATE, CONTEXT_FORMAT, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type LinkPlace, type OpenTarget } from './settings';
 import { Annotator } from '../annotator/annotator';
 import { DocumentEmbed, registerEmbeds, type EmbedContext } from './embed';
 import { FppSettingTab } from './setting-tab';
@@ -322,6 +322,9 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 			if (!this.settings.copyFormats.some((f) => needsComment(f.template)))
 				this.settings.copyFormats.splice(1, 0, { id: 'callout-comment', name: 'Callout with comment', template: COMMENT_TEMPLATE });
 		}
+		// v5 added the highlight-in-context format; offer it to existing setups once.
+		if (version < 5 && data.copyFormats && !this.settings.copyFormats.some((f) => f.template.includes('{{context}}')))
+			this.settings.copyFormats.push({ ...CONTEXT_FORMAT });
 		// v4: link types are the format's own (`primary`) or text fragments.
 		if (this.settings.linkType !== 'text') this.settings.linkType = 'primary';
 		this.settings.settingsVersion = DEFAULT_SETTINGS.settingsVersion;

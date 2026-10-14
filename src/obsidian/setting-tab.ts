@@ -422,7 +422,7 @@ export class FppSettingTab extends PluginSettingTab {
 		const formats = group(
 			'links',
 			'Copy formats',
-			`Shown in the right-click menu. Variables: \`{{text}}\`, \`{{link}}\`, \`{{color}}\`, \`{{title}}\`, \`{{author}}\`, \`{{chapter}}\`, \`{{locator}}\`, \`{{file}}\`, \`{{path}}\`${format.extraTemplateVars ? `, ${codeVars(format.extraTemplateVars)}` : ''}, and \`{{comment}}\` (asks for a comment when copying). Multi-line values keep the \`> \` prefix of their line.`,
+			`Shown in the right-click menu. Variables: \`{{text}}\`, \`{{context}}\` (the selection \`==highlighted==\` in its sentence; a whole sentence with the ones before and after), \`{{link}}\`, \`{{color}}\`, \`{{title}}\`, \`{{author}}\`, \`{{chapter}}\`, \`{{locator}}\`, \`{{file}}\`, \`{{path}}\`${format.extraTemplateVars ? `, ${codeVars(format.extraTemplateVars)}` : ''}, and \`{{comment}}\` (asks for a comment when copying). Multi-line values keep the \`> \` prefix of their line.`,
 		);
 		formats.heading.addButton((b) =>
 			b.setButtonText('Add format').onClick(async () => {

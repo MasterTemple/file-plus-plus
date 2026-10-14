@@ -114,3 +114,15 @@ export function rangeToMarkdown(range: Range): string {
 		.replace(/\n{3,}/g, '\n\n')
 		.trim();
 }
+
+/**
+ * A selection in its sentences as Markdown: the selection marked `==highlighted==`, a mark per
+ * paragraph (marks don't span paragraphs), with spaces kept outside the marks so they render.
+ */
+export function highlightInContext(ctx: { before: string; text: string; after: string }): string {
+	const marked = ctx.text
+		.split(/\n\s*\n/)
+		.map((p) => p.replace(/^(\s*)([^]*?)(\s*)$/, (_, a: string, t: string, b: string) => (t ? `${a}==${t}==${b}` : a + b)))
+		.join('\n\n');
+	return `${ctx.before}${marked}${ctx.after}`.replace(/ {2,}/g, ' ').trim();
+}

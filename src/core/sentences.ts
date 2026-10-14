@@ -75,3 +75,41 @@ export function sentenceRange(block: Element, node: Node, offset: number, lang?:
 	range.setEnd(...point(b, true));
 	return range;
 }
+
+/** What a selection of whole sentences may leave out at its start: spaces, opening quotes and brackets, dashes. */
+const LEADING = /^[\s"'“‘„‚«‹([{¿¡—–-]*$/u;
+/** …and at its end: spaces, closing quotes and brackets, final punctuation. */
+const TRAILING = /^[\s"'”’»›)\]}.!?…:;,—–-]*$/u;
+
+/** Where the sentence of `text` that a selection starting at `at` starts in; with the sentence before it (null: none in `text`) */
+export function sentenceStartAt(text: string, at: number, lang?: string): { start: number; whole: boolean; prev: [number, number] | null } {
+	const bounds = sentenceBounds(text, lang).filter(([a, b]) => b > a);
+	// The first sentence ending after the position (a position between sentences starts the next one)
+	const i = bounds.findIndex(([, b]) => b > at);
+	if (i < 0) return { start: at, whole: true, prev: bounds.length ? bounds[bounds.length - 1] : null };
+	const start = Math.min(bounds[i][0], at);
+	return { start, whole: LEADING.test(text.slice(start, at)), prev: i > 0 ? bounds[i - 1] : null };
+}
+
+/** Where the sentence of `text` that a selection ending at `at` ends; with the sentence after it (null: none in `text`) */
+export function sentenceEndAt(text: string, at: number, lang?: string): { end: number; whole: boolean; next: [number, number] | null } {
+	const bounds = sentenceBounds(text, lang).filter(([a, b]) => b > a);
+	// The last sentence starting before the position (a position between sentences ends the one before)
+	let i = -1;
+	for (let k = 0; k < bounds.length; k++) if (bounds[k][0] < at) i = k;
+	if (i < 0) return { end: at, whole: true, next: bounds.length ? bounds[0] : null };
+	const end = Math.max(bounds[i][1], at);
+	return { end, whole: TRAILING.test(text.slice(at, end)), next: i + 1 < bounds.length ? bounds[i + 1] : null };
+}
+
+/**
+ * The context of a selection [start, end) of `text`: the sentences it's in, or, when it covers whole
+ * sentences (leaving out quotes and final punctuation still counts), those and the sentences before
+ * and after. `needPrev` / `needNext`: the sentence before or after would be outside `text`.
+ */
+export function sentenceContext(text: string, start: number, end: number, lang?: string): { start: number; end: number; needPrev: boolean; needNext: boolean } {
+	const s = sentenceStartAt(text, start, lang);
+	const e = sentenceEndAt(text, end, lang);
+	if (!(s.whole && e.whole)) return { start: s.start, end: e.end, needPrev: false, needNext: false };
+	return { start: s.prev?.[0] ?? s.start, end: e.next?.[1] ?? e.end, needPrev: !s.prev, needNext: !e.next };
+}
