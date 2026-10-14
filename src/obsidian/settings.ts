@@ -29,13 +29,15 @@ export interface MenuEntry {
 
 /** What a reader key (`readerKeys`) does, its default key and its name in the settings. */
 export const READER_KEY_ACTIONS = [
-	{ id: 'scroll-down', key: 'j', name: 'Scroll down', desc: 'In the outline: the next entry.' },
-	{ id: 'scroll-up', key: 'k', name: 'Scroll up', desc: 'In the outline: the previous entry.' },
+	{ id: 'scroll-down', key: 'j', name: 'Scroll down', desc: 'In the outline and the search results: the next entry.' },
+	{ id: 'scroll-up', key: 'k', name: 'Scroll up', desc: 'In the outline and the search results: the previous entry.' },
 	{ id: 'page-down', key: 'd', name: 'Scroll down half a screen' },
 	{ id: 'page-up', key: 'u', name: 'Scroll up half a screen' },
-	{ id: 'search', key: '/', name: 'Search' },
-	{ id: 'outline', key: 'Tab', name: 'Outline', desc: 'Opens the contents to move through with the scroll keys (or arrows); h / l collapse and expand, Enter goes there, Escape leaves it. Again closes it.' },
-	{ id: 'left-sidebar', key: '\\', name: "Toggle Obsidian's left sidebar" },
+	{ id: 'search', key: '/', name: 'Search', desc: 'In the search box, Ctrl+N / Ctrl+P go to the next / previous result, and Enter moves into the results: the scroll keys move, Enter goes there, / back to the box.' },
+	{ id: 'next-result', key: 'n', name: 'Next search result' },
+	{ id: 'prev-result', key: 'N', name: 'Previous search result' },
+	{ id: 'outline', key: 'Tab', name: 'Outline', desc: 'Moves into the contents: the scroll keys (or arrows) move, h / l collapse and expand, Enter goes there. Again (or Escape) goes back to the text.' },
+	{ id: 'sidebar', key: '\\', name: 'Toggle the sidebar', desc: 'Contents, search and highlights.' },
 	{ id: 'comments', key: 'c', name: 'Toggle comments in the margin' },
 ] as const;
 export type ReaderKeyAction = (typeof READER_KEY_ACTIONS)[number]['id'];

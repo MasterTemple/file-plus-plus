@@ -34,18 +34,23 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'scroll-up': (v) => scroll(v, -0.15),
 		'page-down': (v) => scroll(v, 0.5),
 		'page-up': (v) => scroll(v, -0.5),
-		search: (v) => v.openSearch(),
-		outline: (v) => {
-			if (!v.sidebarTabShown('toc') || !v.sidebar.tocKeysActive()) return v.openOutlineKeys();
-			v.sidebar.setTocKeys(false);
-			v.toggleSidebar(false);
+		search: (v) => {
+			v.sidebar.setKeyMode(null);
+			v.openSearch();
 		},
-		'left-sidebar': () => {
-			const split = plugin.app.workspace.leftSplit as unknown as { collapsed: boolean; expand(): void; collapse(): void };
-			if (split.collapsed) split.expand();
-			else split.collapse();
+		'next-result': (v) => v.sidebar.stepResults(1),
+		'prev-result': (v) => v.sidebar.stepResults(-1),
+		outline: (v) => (v.sidebar.keysMode() === 'toc' ? leaveOutline(v) : v.openOutlineKeys()),
+		sidebar: (v) => {
+			v.sidebar.setKeyMode(null);
+			v.toggleSidebar();
 		},
 		comments: () => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:toggle-margin-comments`),
+	};
+	/** Back to the text from the outline (a drawer-style sidebar closes). */
+	const leaveOutline = (v: DocumentView) => {
+		v.sidebar.setKeyMode(null);
+		if (v.sidebarIsOverlay()) v.toggleSidebar(false, false);
 	};
 	const scroll = (v: DocumentView, screens: number) => {
 		const el = v.reader!.scroller;
@@ -55,13 +60,15 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		const s = plugin.settings;
 		if (!s.numberKeyColors && !s.readerKeysEnabled) return;
 		const key = keyName(e);
-		const v = key ? plugin.activeView() : null;
-		if (!key || !v?.reader || typing() || activeDocument.querySelector('body > .modal-container, body > .menu, body > .suggestion-container')) return;
+		const v = plugin.activeView();
+		if (!v?.reader || activeDocument.querySelector('body > .modal-container, body > .menu, body > .suggestion-container')) return;
 		const run = (fn: () => void) => {
 			e.preventDefault();
 			e.stopPropagation();
 			fn();
 		};
+		const sidebar = v.sidebar;
+		if (!key || typing()) return;
 		if (s.numberKeyColors && /^\d$/.test(key)) {
 			const n = Number(key);
 			const color = n === 0 ? null : s.palette[n - 1];
@@ -70,26 +77,29 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		}
 		if (!s.readerKeysEnabled) return;
 		const bound = (id: ReaderKeyAction) => s.readerKeys[id] === key;
-		// Moving through the outline: the scroll keys and arrows move, h / l fold, Enter goes there.
-		const toc = v.sidebar;
-		if (toc.tocKeysActive()) {
-			if (!v.sidebarTabShown('toc')) toc.setTocKeys(false);
-			else {
-				const move = bound('scroll-down') || key === 'ArrowDown' ? 1 : bound('scroll-up') || key === 'ArrowUp' ? -1 : 0;
-				if (move) return run(() => toc.moveTocCursor(move));
-				if (key === 'h' || key === 'ArrowLeft') return run(() => toc.foldTocCursor(false));
-				if (key === 'l' || key === 'ArrowRight') return run(() => toc.foldTocCursor(true));
-				if (key === 'Enter') return run(() => toc.openTocCursor());
-				if (key === 'Escape') return run(() => toc.setTocKeys(false));
-			}
+		const move = bound('scroll-down') || key === 'ArrowDown' ? 1 : bound('scroll-up') || key === 'ArrowUp' ? -1 : 0;
+		// The outline: the scroll keys and arrows move, h / l fold, Enter goes there.
+		const mode = sidebar.keysMode();
+		if (mode && !v.sidebarTabShown(mode === 'toc' ? 'toc' : 'search')) sidebar.setKeyMode(null);
+		else if (mode === 'toc') {
+			if (move) return run(() => sidebar.moveTocCursor(move));
+			if (key === 'h' || key === 'ArrowLeft') return run(() => sidebar.foldTocCursor(false));
+			if (key === 'l' || key === 'ArrowRight') return run(() => sidebar.foldTocCursor(true));
+			if (key === 'Enter') return run(() => sidebar.openTocCursor());
+			if (key === 'Escape') return run(() => leaveOutline(v));
+		} else if (mode === 'results') {
+			// The search results: the scroll keys and arrows move (the document follows), Enter goes there.
+			if (move) return run(() => sidebar.stepResults(move));
+			if (key === 'Enter') return run(() => sidebar.leaveResults());
+			if (key === 'Escape') return run(() => sidebar.setKeyMode(null));
 		}
 		const action = (Object.keys(actions) as ReaderKeyAction[]).find(bound);
 		if (action) run(() => actions[action](v));
 	};
 	// Capture: ahead of the sidebar's own handling (Tab moving the focus)
 	plugin.registerDomEvent(document, 'keydown', handle, { capture: true });
-	// Clicking anywhere leaves the outline's key mode.
+	// Clicking anywhere leaves the outline's or the results' key mode.
 	plugin.registerDomEvent(document, 'mousedown', () => {
-		for (const v of plugin.views()) v.sidebar?.setTocKeys(false);
+		for (const v of plugin.views()) v.sidebar?.setKeyMode(null);
 	});
 }

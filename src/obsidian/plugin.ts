@@ -313,7 +313,8 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.settings = { ...defaults, ...data, appearance: { desktop: appearance('desktop'), mobile: appearance('mobile') } };
 		const opening = (place: LinkPlace) => ({ ...defaults.linkOpening[place], ...data?.linkOpening?.[place] });
 		this.settings.linkOpening = { mobile: opening('mobile'), desktop: opening('desktop'), half: opening('half') };
-		this.settings.readerKeys = { ...defaults.readerKeys, ...data.readerKeys };
+		// Keys of actions that are gone are dropped.
+		this.settings.readerKeys = Object.fromEntries(Object.entries(defaults.readerKeys).map(([id, key]) => [id, typeof data.readerKeys?.[id] === 'string' ? data.readerKeys[id] : key])) as FppSettings['readerKeys'];
 		delete (this.settings as { reader?: unknown }).reader;
 		this.migrateSettings(data);
 		// Formats saved before format ids existed.

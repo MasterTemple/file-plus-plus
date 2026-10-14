@@ -107,14 +107,15 @@ if (rc) {
 }
 const key = opt('--key'); // e.g. ctrl+c
 if (key) {
-	const parts = key.toLowerCase().split('+');
+	// `N` is Shift+N
+	const parts = (/^[A-Z]$/.test(key) ? `shift+${key}` : key).toLowerCase().split('+');
 	const named: Record<string, [string, number]> = { tab: ['Tab', 9], enter: ['Enter', 13], escape: ['Escape', 27], esc: ['Escape', 27], backspace: ['Backspace', 8], delete: ['Delete', 46], arrowup: ['ArrowUp', 38], arrowdown: ['ArrowDown', 40], arrowleft: ['ArrowLeft', 37], arrowright: ['ArrowRight', 39], up: ['ArrowUp', 38], down: ['ArrowDown', 40], left: ['ArrowLeft', 37], right: ['ArrowRight', 39] };
 	const k = parts.pop()!;
 	const n = named[k];
 	const modifiers = (parts.includes('alt') ? 1 : 0) | (parts.includes('ctrl') ? 2 : 0) | (parts.includes('meta') ? 4 : 0) | (parts.includes('shift') ? 8 : 0);
 	const base = n
 		? { modifiers, key: n[0], code: n[0], windowsVirtualKeyCode: n[1] }
-		: { modifiers, key: k, code: /^\d$/.test(k) ? `Digit${k}` : `Key${k.toUpperCase()}`, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0) };
+		: { modifiers, key: k.length === 1 && modifiers & 8 ? k.toUpperCase() : k, code: /^\d$/.test(k) ? `Digit${k}` : `Key${k.toUpperCase()}`, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0) };
 	const commands = modifiers === 2 && k === 'c' ? ['copy'] : [];
 	// A printable key without Ctrl/Alt/Meta types its character (if nothing handles the keydown)
 	const text = !n && k.length === 1 && !(modifiers & 7) ? { text: modifiers & 8 ? k.toUpperCase() : k } : {};

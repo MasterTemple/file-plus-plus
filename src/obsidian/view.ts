@@ -1258,7 +1258,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	/** The sidebar at the contents, moved through with keys (reader keys) */
 	openOutlineKeys(): void {
 		this.showSidebarTab('toc');
-		this.sidebar.setTocKeys(true);
+		this.sidebar.setKeyMode('toc');
 	}
 
 	openSearch(): void {

@@ -1,5 +1,5 @@
 import { type HighlightSpec, type SearchResult, type TocItem } from '../core';
-import { Component, MarkdownRenderer, Menu, Platform, debounce, setIcon, type HoverParent, type HoverPopover, type TFile } from 'obsidian';
+import { Component, MarkdownRenderer, Menu, Platform, Scope, debounce, setIcon, type HoverParent, type HoverPopover, type TFile } from 'obsidian';
 import type { HighlightEntry } from '../annotator/highlight-index';
 import { layerId, type Annotation, type AnnotationProvider } from './api';
 import { titleCase } from './settings';
@@ -133,7 +133,7 @@ export class Sidebar {
 	}
 
 	setToc(toc: TocItem[] | null): void {
-		this.setTocKeys(false);
+		this.setKeyMode(null);
 		this.tocEl.empty();
 		this.tocItems.clear();
 		this.results = [];
@@ -195,20 +195,42 @@ export class Sidebar {
 	// --- Moving through the TOC with keys (reader keys) ------------------------------------------
 
 	private tocCursor: HTMLElement | null = null;
-	private tocKeys = false;
+	private keyMode: 'toc' | 'results' | null = null;
 
-	tocKeysActive(): boolean {
-		return this.tocKeys;
+	/** What the reader keys move through: the TOC, the search results, or (null) the document. */
+	keysMode(): 'toc' | 'results' | null {
+		return this.keyMode;
 	}
 
-	/** Start (at the current chapter) or stop moving through the TOC with keys. */
-	setTocKeys(on: boolean): void {
-		if (on === this.tocKeys) return;
-		this.tocKeys = on;
-		this.tocEl.toggleClass('fpp-toc-keys', on);
-		if (!on) return this.setTocCursor(null);
-		const current = this.currentToc ? this.tocItems.get(this.currentToc) : null;
-		this.setTocCursor(current ?? this.visibleTocItems()[0] ?? null);
+	/** Move through the TOC (from the current chapter) or the search results with keys, or (null) stop. */
+	setKeyMode(mode: 'toc' | 'results' | null): void {
+		if (mode === this.keyMode) return;
+		this.keyMode = mode;
+		this.tocEl.toggleClass('fpp-toc-keys', mode === 'toc');
+		this.resultsEl?.toggleClass('fpp-results-keys', mode === 'results');
+		if (mode !== 'toc') this.setTocCursor(null);
+		if (mode === 'toc') {
+			const current = this.currentToc ? this.tocItems.get(this.currentToc) : null;
+			this.setTocCursor(current ?? this.visibleTocItems()[0] ?? null);
+		}
+		if (mode === 'results') {
+			if (this.searchInput === activeDocument.activeElement) this.searchInput.blur();
+			if (this.current === -1) this.stepResults(1);
+		}
+	}
+
+	/** The next (`delta` 1) or previous search result, shown in the document; false without results. */
+	stepResults(delta: number): boolean {
+		if (!this.results.length) return false;
+		const n = this.results.length;
+		this.select(this.current === -1 ? (delta > 0 ? 0 : n - 1) : (this.current + delta + n) % n);
+		return true;
+	}
+
+	/** Done with the results: back to the document (a drawer-style sidebar gets out of the way). */
+	leaveResults(): void {
+		this.setKeyMode(null);
+		if (this.view.sidebarIsOverlay()) this.view.toggleSidebar(false, false);
 	}
 
 	/** TOC entries not inside a collapsed one, in order. */
@@ -246,7 +268,7 @@ export class Sidebar {
 	/** Go to the entry at the cursor (as a click would), leaving key mode. */
 	openTocCursor(): void {
 		const el = this.tocCursor;
-		this.setTocKeys(false);
+		this.setKeyMode(null);
 		if (el && !el.hasClass('is-disabled')) el.click();
 	}
 
@@ -291,6 +313,19 @@ export class Sidebar {
 			if (q !== this.lastQuery && (q.trim().length >= 2 || !q.trim())) this.runSearch();
 		}, Platform.isMobile ? 450 : 250, true);
 		this.searchInput.addEventListener('input', run);
+		// With reader keys, Ctrl+N / Ctrl+P step through the results while typing (ahead of Obsidian's
+		// hotkeys, as a modal's keys are).
+		const app = this.view.plugin.app;
+		const scope = new Scope(app.scope);
+		for (const [key, delta] of [['n', 1], ['p', -1]] as const)
+			scope.register(['Ctrl'], key, () => {
+				this.stepResults(delta);
+				return false;
+			});
+		this.searchInput.addEventListener('focus', () => {
+			if (this.view.plugin.settings.readerKeysEnabled) app.keymap.pushScope(scope);
+		});
+		this.searchInput.addEventListener('blur', () => app.keymap.popScope(scope));
 		// A pasted query is searched for at once, even one that's already there
 		this.searchInput.addEventListener('paste', () => {
 			window.setTimeout(() => {
@@ -301,7 +336,11 @@ export class Sidebar {
 			if (e.key === 'Enter') {
 				e.preventDefault();
 				if (this.searchInput && this.searchInput.value !== this.lastQuery) this.runSearch();
-				this.step(e.shiftKey ? -1 : 1);
+				// With reader keys, into the results (j / k move through them), from the one shown if any
+				if (this.view.plugin.settings.readerKeysEnabled && this.activeTab === 'search' && this.results.length) {
+					if (this.current === -1) this.step(e.shiftKey ? -1 : 1);
+					this.setKeyMode('results');
+				} else this.step(e.shiftKey ? -1 : 1);
 			} else if (e.key === 'Escape') {
 				this.searchInput.value = '';
 				this.runSearch();
@@ -379,9 +418,7 @@ export class Sidebar {
 	step(delta: number): void {
 		const provider = this.providerPanels.get(this.activeTab);
 		if (provider) return provider.step(delta);
-		if (!this.results.length) return;
-		const n = this.results.length;
-		this.select(this.current === -1 ? (delta > 0 ? 0 : n - 1) : (this.current + delta + n) % n);
+		this.stepResults(delta);
 	}
 
 	/** `fromClick`: a result was tapped, so a drawer-style sidebar gets out of the way. */
