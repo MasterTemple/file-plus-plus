@@ -11,7 +11,7 @@ import { askForComment, confirmDeleteHighlight } from './comment-modal';
 import { getComment, removeHighlight, setComment } from './comment-utils';
 import { HighlightIndex, type HighlightEntry } from './highlight-index';
 import { ImportModal } from './import';
-import { pickSentence, pickWords } from '../obsidian/sentence-hints';
+import { pickHint, pickSentence, pickWords, type Spot } from '../obsidian/sentence-hints';
 
 /**
  * The note-taking layer over the viewer: links from notes into a document are its highlights (the
@@ -134,6 +134,16 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 					return true;
 				},
 			});
+		this.plugin.addCommand({
+			id: 'select-highlight',
+			name: 'Select a highlight in view (by its label)',
+			checkCallback: (checking) => {
+				const v = this.plugin.activeView();
+				if (!v?.reader) return false;
+				if (!checking) this.pickHighlight(v);
+				return true;
+			},
+		});
 		const copyCommand = (id: string, title: string, target: () => CopyTarget | null) =>
 			this.plugin.addCommand({
 				id,
@@ -163,9 +173,17 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		this.syncFormatCommands();
 	}
 
+	/** The color hint labels are drawn in: the current highlight color's */
+	hintColor(view: DocumentView<Doc, R>): string {
+		const color = view.activeColor;
+		return (color && this.plugin.settings.palette.find((p) => p.name === color)?.color) || '#d4d4d4';
+	}
+
 	/**
-	 * Label the sentences in view (`words`: pick a passage from word to word); what's picked is copied
-	 * (and inserted) as the hint format, or the comment one.
+	 * Label the sentences in view (`words`: pick a passage from word to word; a sentence's label typed
+	 * with Shift: from word to word in it); what's picked is copied (and inserted) as the hint format,
+	 * or the comment one, in the color current then, and selected (`ViewAnnotator.select`). With text
+	 * selected, that's what's picked.
 	 */
 	pickPassage(view: DocumentView<Doc, R>, comment: boolean, words = false): void {
 		const s = this.plugin.settings;
@@ -173,22 +191,61 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		const what = comment
 			? (this.resolveCopyAction(s.hintCommentFormat) ?? formats.find((f) => needsComment(f.template)) ?? { id: '', name: 'Callout with comment', template: COMMENT_TEMPLATE })
 			: (this.resolveCopyAction(s.hintFormat) ?? formats.find((f) => !needsComment(f.template)) ?? 'link');
-		const color = view.activeColor;
-		const css = (color && s.palette.find((p) => p.name === color)?.color) || '#d4d4d4';
-		const shown = (words ? (v: DocumentView, keys: string, c: string, f: (r: Range) => void) => pickWords(v, keys, c, { flow: s.wordHintFlow, startPunctuation: s.hintStartPunctuation, endPunctuation: s.hintEndPunctuation }, f) : pickSentence)(view as unknown as DocumentView, s.hintKeys, css, async (range) => {
+		const color = () => this.hintColor(view);
+		const picked = async (range: Range) => {
 			const reader = view.reader;
 			const info = reader?.describeRange(range);
 			if (!reader || !info) return;
+			const active = view.activeColor;
 			// What the comment is about, while it's asked for
 			reader.setPendingSelection(range);
 			try {
-				await this.copy(view, info, what, color);
+				await this.copy(view, info, what, active);
 			} finally {
 				reader.setPendingSelection(null);
 			}
-			reader.flash(range, { color: css });
-		});
+			reader.flash(range, { color: color() });
+			view.annotations.selectWhenDrawn(range);
+		};
+		const selection = view.reader?.getSelection();
+		if (selection?.text.trim()) {
+			view.reader!.clearSelection();
+			return void picked(selection.range);
+		}
+		const v = view as unknown as DocumentView;
+		const wordOpts = { flow: s.wordHintFlow, startPunctuation: s.hintStartPunctuation, endPunctuation: s.hintEndPunctuation };
+		const shown = words
+			? pickWords(v, s.hintKeys, color, wordOpts, picked)
+			: pickSentence(v, s.hintKeys, color, (range, shifted) => {
+					if (!shifted || !pickWords(v, s.hintKeys, color, { ...wordOpts, within: range }, picked)) void picked(range);
+				});
 		if (!shown) this.plugin.notice(s.hintKeys.trim() ? 'no sentences in view.' : 'no keys to label sentences with (Settings → keys).');
+	}
+
+	/** Label the highlights in view; the one picked is selected (`ViewAnnotator.select`) */
+	pickHighlight(view: DocumentView<Doc, R>): void {
+		const reader = view.reader;
+		if (!reader) return;
+		const ids = new Map<Range, string>();
+		const spots: Spot[] = [];
+		if (!reader.highlightsAreHidden)
+			for (const h of reader.getHighlights()) {
+				const range = reader.highlightRange(h.id);
+				const line = range && reader.lineOnScreen(range);
+				if (!range || !line) continue;
+				ids.set(range, h.id);
+				spots.push({ range, x: line.left, y: line.top });
+			}
+		spots.sort((a, b) => a.y - b.y || a.x - b.x);
+		const select = (range: Range) => {
+			const id = ids.get(range);
+			if (!id) return;
+			view.annotations.select(id);
+			reader.flash(range, { color: reader.highlightColor(id) ?? undefined });
+		};
+		if (spots.length === 1) return select(spots[0].range);
+		if (!spots.length || !pickHint(view as unknown as DocumentView, spots, this.plugin.settings.hintKeys, () => this.hintColor(view), select))
+			this.plugin.notice(spots.length ? 'no keys to label highlights with (Settings → keys).' : 'no highlights in view.');
 	}
 
 	/** Re-register the per-format copy commands (after formats are added, renamed or removed). Hotkeys are kept by id. */

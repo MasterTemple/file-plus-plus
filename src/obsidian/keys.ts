@@ -5,7 +5,7 @@ import type { ReaderKeyAction } from './settings';
 import { chordOf, parseBinding, SequenceMatcher } from './key-sequence';
 import type { Place } from './jump-list';
 import { KeyScroller } from './key-scroll';
-import { endSentenceHints, sentenceHintKey, sentenceHintsShown } from './sentence-hints';
+import { endSentenceHints, recolorSentenceHints, sentenceHintKey, sentenceHintsShown } from './sentence-hints';
 
 /** Whether the focus is where a key types (an input, a comment, the editor), so reader keys leave it alone. */
 export function typing(): boolean {
@@ -68,6 +68,7 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'prev-highlight': () => command('previous-highlight'),
 		'next-comment': () => command('next-comment'),
 		'prev-comment': () => command('previous-comment'),
+		'select-highlight': () => command('select-highlight'),
 	};
 	const command = (id: string) => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:${id}`);
 	const scroller = new KeyScroller();
@@ -172,14 +173,27 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		return null;
 	};
 
+	/** The palette color a number key picks (null: no color; undefined: not a number key, or they're off) */
+	const numberColor = (chord: string): string | null | undefined => {
+		const s = plugin.settings;
+		if (!s.numberKeyColors || !/^\d$/.test(chord)) return undefined;
+		const n = Number(chord);
+		return n === 0 ? null : s.palette[n - 1]?.name;
+	};
+
 	/** false: the key was used (Obsidian then stops it); undefined: it goes on to the hotkeys. */
 	const handle = (e: KeyboardEvent): false | void => {
 		const s = plugin.settings;
 		const chord = chordOf(e);
 		if (!chord) return; // a modifier on its own: a sequence goes on
-		// Sentence labels shown (also when picked from a command): keys type a label
+		// Sentence labels shown (also when picked from a command): keys type a label, the number keys
+		// (that aren't label keys) pick the color it's highlighted in
 		if (sentenceHintsShown() && !typing()) {
-			sentenceHintKey(chord);
+			const color = numberColor(chord);
+			if (color !== undefined && !s.hintKeys.includes(chord)) {
+				plugin.activeView()?.setActiveColor(color);
+				recolorSentenceHints();
+			} else sentenceHintKey(chord, e.shiftKey);
 			return false;
 		}
 		if (!s.numberKeyColors && !s.readerKeysEnabled) return;
@@ -193,11 +207,11 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 			return false;
 		}
 		if (!matcher.isPending) {
-			if (s.numberKeyColors && /^\d$/.test(chord)) {
-				const n = Number(chord);
-				const color = n === 0 ? null : s.palette[n - 1];
-				if (color === undefined) return;
-				v.setActiveColor(color?.name ?? null);
+			// A selected highlight's keys (the number keys, c, d…)
+			if (v.onReaderKey(chord)) return false;
+			const color = numberColor(chord);
+			if (color !== undefined) {
+				v.setActiveColor(color);
 				return false;
 			}
 			if (!s.readerKeysEnabled) return;
@@ -210,7 +224,8 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		if (!s.readerKeysEnabled) return;
 		window.clearTimeout(timer);
 		const r = matcher.feed(chord, currentBindings());
-		if (r.kind === 'none') return;
+		if (r.before) perform(v, r.before as ReaderKeyAction);
+		if (r.kind === 'none') return r.before ? false : undefined;
 		if (r.kind === 'run') perform(v, r.action as ReaderKeyAction);
 		else
 			timer = window.setTimeout(() => {

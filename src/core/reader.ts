@@ -9,6 +9,7 @@ import { blockText, sentenceBounds, sentenceEndAt, sentenceRange, sentenceRanges
 import { BASE_CSS, DEFAULT_SETTINGS, settingsToVars, type ReaderSettings } from './settings';
 import { Margin } from './margin';
 import { HINT_CSS } from './hints';
+import { NOTE_PREVIEW_CSS, NotePreview } from './note-preview';
 
 /** Strength of highlights dimmed while others are focused. */
 const DIMMED = 0.3;
@@ -235,7 +236,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		this.shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
 		this.shadow.replaceChildren();
 		const base = this.doc.createElement('style');
-		base.textContent = BASE_CSS + HINT_CSS + this.extraCss();
+		base.textContent = BASE_CSS + HINT_CSS + NOTE_PREVIEW_CSS + this.extraCss();
 		this.highlightStyle = this.doc.createElement('style');
 		this.scroller = this.doc.createElement('div');
 		this.scroller.className = 'fpp-scroller';
@@ -757,6 +758,12 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return out;
 	}
 
+	/** The first line of `range` in view (viewport coordinates), if any */
+	lineOnScreen(range: Range): DOMRect | undefined {
+		if (!this.scroller.isConnected || !this.scroller.clientHeight) return undefined;
+		return this.lineInView(range, this.scroller.getBoundingClientRect());
+	}
+
 	/** The first line box of `range` inside the viewport `view` */
 	private lineInView(range: Range, view: DOMRect): DOMRect | undefined {
 		return Array.from(range.getClientRects()).find((q) => q.width > 0 && q.height > 0 && q.bottom > view.top + 2 && q.top < view.bottom - 2);
@@ -1112,6 +1119,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			`::highlight(${this.hlName('search-current')}) { background-color: rgba(255, 120, 0, 0.8); color: black; }`,
 			`::highlight(${this.hlName('pending')}) { background-color: var(--text-selection, Highlight); }`,
 			`::highlight(${this.hlName('hover')}) { text-decoration: underline 2px; text-decoration-color: currentColor; }`,
+			`::highlight(${this.hlName('selected')}) { text-decoration: underline 3px; text-decoration-color: var(--interactive-accent, #7c5cff); }`,
 			`::highlight(${this.hlName('playing')}) { background-color: color-mix(in srgb, var(--interactive-accent, #7c5cff) 22%, transparent); }`,
 		];
 		for (const g of this.paintGroups) {
@@ -1130,6 +1138,16 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		if (range && this.HighlightCtor) {
 			const h = new this.HighlightCtor(range);
 			h.priority = 20;
+			this.registry!.set(name, h);
+		} else this.registry?.delete(name);
+	}
+
+	/** Mark a highlight as the one keys act on (underlined; null: none) */
+	setSelectedHighlight(range: Range | null): void {
+		const name = this.hlName('selected');
+		if (range && this.HighlightCtor) {
+			const h = new this.HighlightCtor(range);
+			h.priority = 15;
 			this.registry!.set(name, h);
 		} else this.registry?.delete(name);
 	}
@@ -1420,14 +1438,51 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			this.cleanup.push(() => el.removeEventListener(type, fn as EventListener, opts));
 		};
 
+		/** Follows a link inside the document */
+		const follow = (href: string, e: MouseEvent) => {
+			if (!this.onInternalLink?.(href, e)) this.goTo(href);
+		};
+		// Footnotes: shown on hovering (or tapping) their links
+		const notes = new NotePreview({
+			doc: this.doc,
+			scroller: this.scroller,
+			content: this.content,
+			target: (href) => {
+				if (!href.includes('#')) return null;
+				const r = this.resolve(href);
+				const node = r && !r.collapsed && r.startContainer.childNodes[r.startOffset];
+				return node && node.nodeType === 1 ? (node as Element) : null;
+			},
+			follow,
+		});
+		this.cleanup.push(() => notes.hide());
+		let touchedAt = 0;
+		on(this.scroller, 'touchstart', (e) => {
+			touchedAt = Date.now();
+			if (!notes.contains(e.target as Node)) notes.hide();
+		}, { capture: true, passive: true });
+		// Mouse events a tap emits don't count
+		on(this.scroller, 'mouseover', (e) => {
+			if (Date.now() - touchedAt > 800) notes.pointerOver(e.target);
+		});
+		on(this.scroller, 'mouseleave', () => {
+			if (Date.now() - touchedAt > 800) notes.pointerOver(null);
+		});
+		on(this.scroller, 'scroll', () => notes.hide());
+
 		on(this.scroller, 'click', (e) => {
+			if (notes.contains(e.target as Node)) return notes.click(e);
 			const a = (e.target as Element | null)?.closest?.('a');
 			if (a && this.content.contains(a)) {
 				const internal = a.getAttribute('data-fpp-href');
 				const external = a.getAttribute('data-fpp-external');
 				if (internal || external) {
 					e.preventDefault();
-					if (internal && !this.onInternalLink?.(internal, e)) this.goTo(internal);
+					// A tap on a note link shows the note (a tap on it goes there)
+					const note = internal && Date.now() - touchedAt < 800 ? notes.noteLinkAt(a) : null;
+					if (note) return notes.show(note.a, note.href, note.note);
+					notes.hide();
+					if (internal) follow(internal, e);
 					else if (external) this.emit('external-link', e, external);
 					return;
 				}
@@ -1446,8 +1501,6 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		// A triple click selects the sentence, a fourth the paragraph. Counted here: Chromium on Linux
 		// starts `detail` again at 1 after a triple click. Taps (their synthetic mousedowns) don't count.
 		let clicks = { count: 0, at: 0, x: 0, y: 0 };
-		let touchedAt = 0;
-		on(this.scroller, 'touchstart', () => (touchedAt = Date.now()), { capture: true, passive: true });
 		on(this.scroller, 'mousedown', (e) => {
 			if (e.button !== 0 || Date.now() - touchedAt < 800) return;
 			const now = Date.now();
@@ -1555,7 +1608,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		if (this.transition) this.win.cancelAnimationFrame(this.transition.raf);
 		for (const name of this.highlightNames) this.registry?.delete(name);
 		for (const layer of this.layers.values()) for (const name of layer.names) this.registry?.delete(name);
-		for (const k of ['flash', 'search', 'search-current', 'hover', 'pending']) this.registry?.delete(this.hlName(k));
+		for (const k of ['flash', 'search', 'search-current', 'hover', 'pending', 'selected']) this.registry?.delete(this.hlName(k));
 		this.shadow.replaceChildren();
 		this.removeAllListeners();
 	}

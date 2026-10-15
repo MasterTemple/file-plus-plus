@@ -92,21 +92,28 @@ export function parseBinding(text: string, isMac = false): string[] | null {
 	return chords.every((c): c is string => c !== null) ? chords : null;
 }
 
-export type SequenceResult =
+export type SequenceResult = (
 	/** A binding's sequence is complete. */
 	| { kind: 'run'; action: string }
 	/** The keys so far start a longer binding; `fallback` is the shorter one they complete, if any (run it when no key follows). */
 	| { kind: 'pending'; fallback: string | null }
 	/** Not part of any binding. */
-	| { kind: 'none' };
+	| { kind: 'none' }
+) & {
+	/** A key that doesn't go on with the keys before it (`f j` where `f h` is a binding) runs what they were on their own (`f`) first */
+	before?: string;
+};
 
 /** Matches key presses against bindings that may be several chords long (`g g`). */
 export class SequenceMatcher {
 	private pending: string[] = [];
+	/** The binding the pending keys complete on their own */
+	private fallback: string | null = null;
 
 	/** Forget keys typed so far (a timeout, a click, a key that went elsewhere). */
 	reset(): void {
 		this.pending = [];
+		this.fallback = null;
 	}
 
 	get isPending(): boolean {
@@ -124,11 +131,15 @@ export class SequenceMatcher {
 		}
 		if (longer) {
 			this.pending = seq;
+			this.fallback = exact;
 			return { kind: 'pending', fallback: exact };
 		}
-		this.pending = [];
+		const before = this.fallback;
+		this.reset();
 		if (exact) return { kind: 'run', action: exact };
-		// `g x`: the `g` led nowhere, but `x` may be a binding of its own
-		return seq.length > 1 ? this.feed(chord, bindings) : { kind: 'none' };
+		if (seq.length === 1) return { kind: 'none' };
+		// `g x`: the `g` led nowhere (or was a binding of its own), but `x` may be a binding of its own
+		const next = this.feed(chord, bindings);
+		return before ? { ...next, before } : next;
 	}
 }

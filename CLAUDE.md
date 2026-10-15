@@ -19,6 +19,7 @@ src/core/       no Obsidian imports
   lines.ts      line/column locators (L12C5-L14C3) for line-based formats
   sentences.ts  sentence bounds (Intl.Segmenter) and ranges: a triple click selects the sentence, a fourth the paragraph (`reader.multiClickRange`, overridable: verses)
   hints.ts      labels over things in view that keys pick (`hintLabels`, `HintOverlay`); `reader.visibleSentences()` / `visibleWords(within?)` give what to label (`wordRanges` in sentences.ts)
+  note-preview.ts  footnotes in a popover over the text: hovering a note link (desktop), tapping it (touch); `isNoteLink` / `noteOf` decide what's a note
   text-index.ts, search.ts, text-fragment.ts, markdown.ts (range → Markdown), settings.ts (themes, base CSS)
 src/obsidian/    the viewer (`file-plus-plus/viewer`): knows nothing of notes
   format.ts     FileFormat: everything a plugin tells the library about its format
@@ -28,13 +29,13 @@ src/obsidian/    the viewer (`file-plus-plus/viewer`): knows nothing of notes
   embed.ts      DocumentEmbed (subclassable) for ![[file#…]] and hover previews
   player.ts     MediaPlayer (a URL, our own controls; container query: one row wide, two rows narrow; clips stop just inside their end) and PlaybackFollower (keeps what plays in view, not just after scrolling by hand): Transcript++ and the Topos Bible plugin; styles under `.fpp-player-ui`
   api.ts        FileApi, annotation providers (`preview`, `extractText`), `file-plus-plus:api-ready`
-  sentence-hints.ts  picking a sentence (`h` / `c`) or a passage word to word (`H` / `C`, `wordHintFlow`) in view by labels, in steps (the annotator's `pickPassage` commands); keys.ts hands it keys first
+  sentence-hints.ts  picking a sentence (`h` / `c`; Shift on its label: words in it) or a passage word to word (`H` / `C`, `wordHintFlow`) in view by labels, in steps (the annotator's `pickPassage` / `pickHighlight` commands); keys.ts hands it keys first (number keys recolor the labels)
   sidebar.ts, setting-tab.ts, appearance.ts, annotation-tip.ts, link-utils.ts (link syntax, shared)
   patch.ts      around(): method patching that tolerates other plugins patching the same method
   viewer.ts / index.ts  exports: the viewer / everything (`file-plus-plus/obsidian`)
 src/annotator/  the note-taking layer (`file-plus-plus/annotator`): links in notes are highlights
   annotator.ts  Annotator (`plugin.annotator`): the highlight index and its events, highlight actions (open source, comment, color, delete), copying and templates, annotation files, saving provider annotations, Backlinks hover, its commands
-  view-annotator.ts  ViewAnnotator (`view.annotations`): drawing highlights, margin comments, the highlight menu, comment editing, mobile gestures on highlights, the copy/insert row
+  view-annotator.ts  ViewAnnotator (`view.annotations`): drawing highlights, margin comments, the highlight menu, comment editing, mobile gestures on highlights, the copy/insert row; the selected highlight (`f h`, or one just made with the keys: `handleKey` takes number keys, `c`, `d` / `d y`, via `view.onReaderKey`; followed by range, since ids are note offsets)
   highlight-index.ts, annotations.ts (annotation files), comment-*.ts, margin-comments.ts
   annotation-folder.ts  AnnotationFolderModal: *Change annotation folder…* (`annotations.planMove` / `move`: renames, then `mergeAnnotationText` for a document's extra files, `retargetLinks` for links to them)
   import.ts     ImportModal + importHighlights: JSON → annotation files (opens each document's view to resolve passages, dedupes by resolved passage + comment); parsing in import-utils.ts (pure)

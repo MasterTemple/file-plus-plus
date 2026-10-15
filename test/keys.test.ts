@@ -53,13 +53,15 @@ test('SequenceMatcher: multi-key bindings, prefixes, fallbacks and restarts', ()
 	expect(m.isPending).toBe(true);
 	expect(m.feed('g', b)).toEqual({ kind: 'run', action: 'top' });
 	expect(m.isPending).toBe(false);
-	// `g j`: the g leads nowhere, j runs on its own
-	m.feed('g', b);
-	expect(m.feed('j', b)).toEqual({ kind: 'run', action: 'down' });
-	m.feed('g', b);
 	expect(m.feed('x', b)).toEqual({ kind: 'none' });
 	expect(m.isPending).toBe(false);
-	expect(m.feed('x', b)).toEqual({ kind: 'none' });
+	// `g` is a binding too: run before what follows it
+	m.feed('g', b);
+	expect(m.feed('j', b)).toEqual({ kind: 'run', action: 'down', before: 'go' });
+	m.feed('g', b);
+	expect(m.feed('x', b)).toEqual({ kind: 'none', before: 'go' });
 	const only = new Map([['top', ['g', 'g']]]);
 	expect(m.feed('g', only)).toEqual({ kind: 'pending', fallback: null });
+	// `g j`: the g leads nowhere, j runs on its own
+	expect(m.feed('j', only)).toEqual({ kind: 'none' });
 });

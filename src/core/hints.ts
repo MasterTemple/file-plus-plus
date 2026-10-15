@@ -52,6 +52,10 @@ export class HintOverlay {
 		scroller.appendChild(this.layer);
 	}
 
+	setColor(color: string): void {
+		this.layer.style.setProperty('--fpp-hint-color', color);
+	}
+
 	/** Shows the labels starting with `typed` (that part dimmed) and returns their hints */
 	narrow(typed: string): Hint[] {
 		const out: Hint[] = [];

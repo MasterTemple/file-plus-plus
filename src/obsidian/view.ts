@@ -585,6 +585,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		this.annotations.refreshHighlights();
 	}
 
+	/** A reader key for a highlight selected in this view (`select-highlight`); true: it was used */
+	onReaderKey(chord: string): boolean {
+		return this.annotations.handleKey(chord);
+	}
+
 	/** Whether this tab shows comments in the margin (when there's room): the setting, unless a link hid them here. */
 	showsComments(): boolean {
 		return this.plugin.settings.marginComments && !this.commentsHidden;

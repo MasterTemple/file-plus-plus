@@ -23,6 +23,104 @@ export class ViewAnnotator<Doc = unknown, R extends DocumentReader = DocumentRea
 		this.view.reader.setHighlightsHidden(this.view.plugin.settings.hideHighlights);
 		this.view.sidebar.setHighlights(all);
 		this.refreshMargin();
+		this.reselect(all);
+	}
+
+	/** The highlight keys act on (`select-highlight`, or one just made with the keys), by id, and its passage (ids change as notes do) */
+	private selected: string | null = null;
+	private selectedRange: Range | null = null;
+	/** `d` on a highlight with a comment: `y` deletes it (the notice that says so) */
+	private confirmingDelete: Notice | null = null;
+	/** A passage just highlighted with the keys: selected once its highlight is drawn (until `until`) */
+	private toSelect: { range: Range; until: number } | null = null;
+	private stopSelecting: (() => void) | null = null;
+
+	/** Select a highlight for the keys (null: none) */
+	select(id: string | null): void {
+		const reader = this.view.reader;
+		this.selected = id;
+		this.confirmingDelete?.hide();
+		this.confirmingDelete = null;
+		this.stopSelecting?.();
+		this.stopSelecting = null;
+		const range = id ? (reader?.highlightRange(id) ?? null) : null;
+		this.selectedRange = range?.cloneRange() ?? null;
+		reader?.setSelectedHighlight(range);
+		if (!range || !reader) return;
+		// A click anywhere lets go
+		const off = () => this.select(null);
+		reader.doc.addEventListener('mousedown', off, { capture: true, once: true });
+		this.stopSelecting = () => reader.doc.removeEventListener('mousedown', off, { capture: true });
+	}
+
+	/** Select the highlight of `range` once it's drawn (after the note is written and indexed) */
+	selectWhenDrawn(range: Range): void {
+		this.toSelect = { range: range.cloneRange(), until: Date.now() + 5000 };
+		this.reselect(this.view.plugin.annotator.index.get(this.view.file?.path ?? ''));
+	}
+
+	/** After the highlights are drawn again: the selected one again, or the one waited for */
+	private reselect(entries: HighlightEntry[]): void {
+		const reader = this.view.reader;
+		if (!reader) return;
+		/** The highlight of a passage */
+		const at = (range: Range) =>
+			entries.find((e) => {
+				const r = reader.highlightRange(e.id);
+				return !!r && r.compareBoundaryPoints(Range.START_TO_START, range) === 0 && r.compareBoundaryPoints(Range.END_TO_END, range) === 0;
+			});
+		const wanted = this.toSelect;
+		if (wanted && Date.now() < wanted.until) {
+			const hit = at(wanted.range);
+			if (hit) {
+				this.toSelect = null;
+				return this.select(hit.id);
+			}
+		} else this.toSelect = null;
+		if (this.selected) this.select((this.selectedRange && at(this.selectedRange)?.id) ?? null);
+	}
+
+	/**
+	 * A reader key while a highlight is selected: the number keys recolor it, `c` edits its comment,
+	 * `d` deletes it (`d y` with a comment), Escape lets go. True: the key was used. A highlight
+	 * scrolled out of view isn't selected anymore.
+	 */
+	handleKey(chord: string): boolean {
+		const { reader, plugin } = this.view;
+		if (!this.selected || !reader) return false;
+		const entry = plugin.annotator.index.get(this.view.file?.path ?? '').find((e) => e.id === this.selected);
+		const range = reader.highlightRange(this.selected);
+		if (!entry || !range || !reader.lineOnScreen(range)) {
+			this.select(null);
+			return false;
+		}
+		if (this.confirmingDelete) {
+			this.confirmingDelete.hide();
+			this.confirmingDelete = null;
+			if (chord === 'y') {
+				this.select(null);
+				void plugin.annotator.deleteHighlight(entry, true);
+			} else plugin.notice('kept the highlight.', 1500);
+			return true;
+		}
+		const s = plugin.settings;
+		if (chord === 'Escape') this.select(null);
+		else if (s.numberKeyColors && /^\d$/.test(chord)) {
+			const n = Number(chord);
+			const color = n === 0 ? null : s.palette[n - 1]?.name;
+			if (color === undefined) return false;
+			this.view.setActiveColor(color);
+			void plugin.annotator.setHighlightColor(entry, color);
+		} else if (chord === 'c') void this.editComment(entry);
+		else if (chord === 'd') {
+			if (entry.comment) {
+				this.confirmingDelete = plugin.notice('this highlight has a comment: y deletes both, any other key keeps them.', 0);
+			} else {
+				this.select(null);
+				void plugin.annotator.deleteHighlight(entry, true);
+			}
+		} else return false;
+		return true;
 	}
 
 	/** Show (or hide) comments in the margin, per settings; when there is no room they show on hover. */

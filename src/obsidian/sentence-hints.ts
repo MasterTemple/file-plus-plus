@@ -9,7 +9,11 @@ interface Session {
 	typed: string;
 	/** The labels' keys are all lowercase: Caps Lock or Shift still types them */
 	lowercase: boolean;
-	onPick: (range: Range) => void;
+	/** Whether a key of the label was typed with Shift */
+	shifted: boolean;
+	/** The labels' color (as it changes: the number keys pick another highlight color) */
+	color: () => string;
+	onPick: (range: Range, shifted: boolean) => void;
 	/** Ended without a pick (Escape, scrolling, a click…) */
 	onCancel?: () => void;
 	cleanup: (() => void)[];
@@ -17,28 +21,31 @@ interface Session {
 
 let session: Session | null = null;
 
-type Spot = { range: Range; x: number; y: number };
+export type Spot = { range: Range; x: number; y: number };
 
 /** How `pickWords` picks: the flow, and whether a passage from a sentence's first word (to its last) takes the punctuation before (after) it */
 export interface WordPickOptions {
 	flow: WordHintFlow;
+	/** Only in this sentence: its first word, then its last */
+	within?: Range;
 	startPunctuation: boolean;
 	endPunctuation: boolean;
 }
 
 /**
  * Labels `spots` of `view` with keys of `alphabet` (in `color`); typing a label calls `onPick` with its
- * range. Anything else (Escape, scrolling, a click) ends it, with `onCancel`. False: nothing to label.
+ * range (and whether Shift was held for it). Anything else (Escape, scrolling, a click) ends it, with
+ * `onCancel`. False: nothing to label.
  */
-function pickHint(view: DocumentView, spots: Spot[], alphabet: string, color: string, onPick: (range: Range) => void, onCancel?: () => void): boolean {
+export function pickHint(view: DocumentView, spots: Spot[], alphabet: string, color: () => string, onPick: (range: Range, shifted: boolean) => void, onCancel?: () => void): boolean {
 	endSentenceHints();
 	const reader = view.reader;
 	const labels = hintLabels(spots.length, alphabet);
 	if (!reader || !labels.length) return false;
 	const hints: Hint[] = spots.map((s, i) => ({ ...s, label: labels[i] }));
-	const overlay = new HintOverlay(reader.scroller, hints, color);
+	const overlay = new HintOverlay(reader.scroller, hints, color());
 	const end = () => endSentenceHints();
-	const s: Session = { view, overlay, typed: '', lowercase: alphabet === alphabet.toLowerCase(), onPick, onCancel, cleanup: [] };
+	const s: Session = { view, overlay, typed: '', lowercase: alphabet === alphabet.toLowerCase(), shifted: false, color, onPick, onCancel, cleanup: [] };
 	const listen = (target: EventTarget, type: string) => {
 		target.addEventListener(type, end, { capture: true });
 		s.cleanup.push(() => target.removeEventListener(type, end, { capture: true }));
@@ -54,17 +61,17 @@ function pickHint(view: DocumentView, spots: Spot[], alphabet: string, color: st
 	return true;
 }
 
-/** Labels the sentences in view; the one picked goes to `onPick`. False: nothing in view. */
-export function pickSentence(view: DocumentView, alphabet: string, color: string, onPick: (range: Range) => void): boolean {
+/** Labels the sentences in view; the one picked goes to `onPick` (`shifted`: its label typed with Shift). False: nothing in view. */
+export function pickSentence(view: DocumentView, alphabet: string, color: () => string, onPick: (range: Range, shifted: boolean) => void): boolean {
 	return !!view.reader && pickHint(view, view.reader.visibleSentences(), alphabet, color, onPick);
 }
 
 /**
  * Picks a passage from one word to another, by labels: a sentence, its first word, the sentence it
- * ends in, its last word (`flow` `sentence`), or the two words among every word in view (`word`).
- * What's picked so far is shown as selected. False: nothing in view.
+ * ends in, its last word (`flow` `sentence`), or the two words among every word in view (`word`), or
+ * in one sentence (`within`). What's picked so far is shown as selected. False: nothing in view.
  */
-export function pickWords(view: DocumentView, alphabet: string, color: string, opts: WordPickOptions, onPick: (range: Range) => void): boolean {
+export function pickWords(view: DocumentView, alphabet: string, color: () => string, opts: WordPickOptions, onPick: (range: Range) => void): boolean {
 	const { flow } = opts;
 	const reader = view.reader;
 	if (!reader) return false;
@@ -104,6 +111,17 @@ export function pickWords(view: DocumentView, alphabet: string, color: string, o
 		else if (!pick(spots, then)) return false;
 		return true;
 	};
+	const { within } = opts;
+	if (within) {
+		show(within);
+		const words = reader.visibleWords(within);
+		const started = startWord(words, (start) => {
+			show(start);
+			endAt(start, words, (end) => finish(start, end, within, within));
+		});
+		if (!started) cancel();
+		return started;
+	}
 	if (flow === 'word')
 		return startWord(reader.visibleWords(), (start) => {
 			show(start);
@@ -137,8 +155,13 @@ export function endSentenceHints(picked = false): void {
 	if (!picked) s.onCancel?.();
 }
 
-/** A key while the labels are shown (`chord` as `chordOf` gives it): always used */
-export function sentenceHintKey(chord: string): void {
+/** The labels take their color again (the highlight color changed) */
+export function recolorSentenceHints(): void {
+	session?.overlay.setColor(session.color());
+}
+
+/** A key while the labels are shown (`chord` as `chordOf` gives it; `shift`: Shift was held): always used */
+export function sentenceHintKey(chord: string, shift = false): void {
 	const s = session;
 	if (!s) return;
 	if (chord === 'Backspace') {
@@ -152,8 +175,10 @@ export function sentenceHintKey(chord: string): void {
 	// Not a label's next key: ignored
 	if (!left.length) return void s.overlay.narrow(s.typed);
 	s.typed += key;
+	// Shift on a lowercase label's key (not Caps Lock: that's a lowercase key typed as uppercase without Shift)
+	if (shift && s.lowercase && key !== chord) s.shifted = true;
 	const hit = left.find((h) => h.label === s.typed);
 	if (!hit) return;
 	endSentenceHints(true);
-	s.onPick(hit.range);
+	s.onPick(hit.range, s.shifted);
 }
