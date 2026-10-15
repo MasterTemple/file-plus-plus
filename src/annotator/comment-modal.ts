@@ -10,6 +10,20 @@ export interface CommentPromptOptions {
 	submit?: string;
 	/** Edit with Vim keys (desktop only: `commentVim`) */
 	vim?: boolean;
+	/** Keys that leave insert mode as Escape does (`jk`; `commentVimEscape`) */
+	vimEscape?: string;
+}
+
+/** The insert-mode mapping to Escape in place */
+let mappedEscape = '';
+
+/** Maps `keys` in insert mode to Escape (as `inoremap jk <Esc>`), in place of the one before */
+function mapEscape(keys: string): void {
+	keys = keys.trim();
+	if (keys === mappedEscape) return;
+	if (mappedEscape) Vim.unmap(mappedEscape, 'insert');
+	if (keys) Vim.map(keys, '<Esc>', 'insert');
+	mappedEscape = keys;
 }
 
 /** The comment modals with a Vim editor, for `:w` / `:q` */
@@ -81,6 +95,7 @@ class CommentModal extends Modal {
 	 */
 	private vimEditor(parent: HTMLElement): () => void {
 		defineEx();
+		mapEscape(this.opts.vimEscape ?? '');
 		const view = new EditorView({
 			parent: parent.createDiv('fpp-comment-input fpp-comment-vim'),
 			state: EditorState.create({

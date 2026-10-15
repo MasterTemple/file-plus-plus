@@ -146,6 +146,8 @@ export interface FppSettings {
 	timestampInLinks: boolean;
 	/** Edit comments with Vim keys (desktop) */
 	commentVim: boolean;
+	/** Keys that leave insert mode there, as Escape (`jk`); '' for none */
+	commentVimEscape: string;
 	/** Show highlights' comments (and annotations' notes) beside the text, when the pane is wide enough. */
 	marginComments: boolean;
 	highlightOpacity: number;
@@ -284,6 +286,7 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	timestampInLinks: true,
 	marginComments: true,
 	commentVim: false,
+	commentVimEscape: '',
 	highlightOpacity: 0.4,
 	linkType: 'primary',
 	linkStyle: 'auto',

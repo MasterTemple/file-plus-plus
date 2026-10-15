@@ -1,6 +1,6 @@
 /**
  * Send real mouse input through CDP (Input.dispatchMouseEvent), then print an expression's value.
- *   bun scripts/cdp-input.ts --port 9333 --click x,y[,mods] | --dblclick x,y | --clicks x,y,n | --drag x1,y1,x2,y2 | --key ctrl+c | --key-hold j,1000 [--eval "js"]
+ *   bun scripts/cdp-input.ts --port 9333 --click x,y[,mods] | --dblclick x,y | --clicks x,y,n | --drag x1,y1,x2,y2 | --key ctrl+c | --type text | --key-hold j,1000 [--eval "js"]
  */
 const args = process.argv.slice(2);
 const opt = (k: string) => {
@@ -118,6 +118,16 @@ if (keyHold) {
 		await Bun.sleep(33);
 	}
 	await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+}
+const type = opt('--type'); // text typed key by key, quickly (letters, digits, space)
+if (type) {
+	for (const ch of type) {
+		const upper = /^[A-Z]$/.test(ch);
+		const code = ch === ' ' ? 'Space' : /^\d$/.test(ch) ? `Digit${ch}` : `Key${ch.toUpperCase()}`;
+		const base = { key: ch, code, windowsVirtualKeyCode: ch.toUpperCase().charCodeAt(0), modifiers: upper ? 8 : 0 };
+		await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: ch });
+		await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+	}
 }
 const key = opt('--key'); // e.g. ctrl+c
 if (key) {

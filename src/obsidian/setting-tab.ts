@@ -654,6 +654,18 @@ export class FppSettingTab extends PluginSettingTab {
 				}),
 			);
 		new Setting(highlights.items)
+			.setName('Leave insert mode with')
+			.setDesc(md('Keys typed quickly in insert mode that work as Escape there (`jk`, as `inoremap jk <Esc>`). Empty: none.'))
+			.addText((t) =>
+				t
+					.setPlaceholder('jk')
+					.setValue(s.commentVimEscape)
+					.onChange(async (v) => {
+						s.commentVimEscape = v.trim();
+						await save();
+					}),
+			);
+		new Setting(highlights.items)
 			.setName('Links without a color')
 			.setDesc(md('For links that have no `&color=…`.'))
 			.addDropdown((d) =>
