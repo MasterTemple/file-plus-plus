@@ -331,6 +331,12 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 			this.settings.copyFormats.push({ ...CONTEXT_FORMAT });
 		// v6: c labels sentences to comment on; toggling comments moved to g c
 		if (version < 6 && this.settings.readerKeys.comments === 'c') this.settings.readerKeys.comments = 'g c';
+		// v7: selecting moved to s (f is a screen down), opening a file to o
+		if (version < 7) {
+			const keys = this.settings.readerKeys;
+			if (keys['select-highlight'] === 'f h') keys['select-highlight'] = 's h';
+			if (keys['open-file'] === 'e') keys['open-file'] = 'o';
+		}
 		// v4: link types are the format's own (`primary`) or text fragments.
 		if (this.settings.linkType !== 'text') this.settings.linkType = 'primary';
 		this.settings.settingsVersion = DEFAULT_SETTINGS.settingsVersion;

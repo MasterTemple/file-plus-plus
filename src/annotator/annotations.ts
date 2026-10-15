@@ -5,13 +5,17 @@ import { linksIn, renderTemplate, retargetLinks } from '../obsidian/link-utils';
 import type { FilePlusPlusPlugin } from '../obsidian/plugin';
 import { ANNOTATION_MODES, type AnnotationMode } from '../obsidian/settings';
 import type { DocumentView } from '../obsidian/view';
+import type { NoteHistory } from './note-history';
 
 /**
  * Annotation files: one markdown file per document with a heading per TOC entry. New annotations from
  * the document can be inserted there at the right place instead of (or as well as) being copied.
  */
 export class Annotations {
-	constructor(private plugin: FilePlusPlusPlugin) {}
+	constructor(
+		private plugin: FilePlusPlusPlugin,
+		private history: NoteHistory,
+	) {}
 
 	private get app() {
 		return this.plugin.app;
@@ -90,7 +94,7 @@ export class Annotations {
 			}
 			lines.push(`${'#'.repeat(Math.min(6, item.depth + 1))} ${heading}`, '');
 		}
-		return vault.create(path, lines.join('\n'));
+		return this.history.create(path, lines.join('\n'), 'the new annotation file');
 	}
 
 	/**
@@ -130,10 +134,10 @@ export class Annotations {
 	async insertMany(view: DocumentView, file: TFile, items: { info: SelectionInfo; block: string }[]): Promise<number> {
 		const order = this.ordering(view);
 		const keyed = items.map((it) => ({ ...it, key: this.format.position.key(it.info.locator) })).filter((it) => it.key !== null);
-		await this.app.vault.process(file, (data) => {
+		await this.history.process(file, (data) => {
 			for (const it of keyed) data = insertAnnotation(data, it.key, it.block, order).data;
 			return data;
-		});
+		}, 'the new highlights');
 		return keyed.length;
 	}
 
@@ -143,11 +147,11 @@ export class Annotations {
 		if (sel === null) throw new Error('The selection has no position');
 		const order = this.ordering(view);
 		let placement: Placement | null = null;
-		await this.app.vault.process(file, (data) => {
+		await this.history.process(file, (data) => {
 			const res = insertAnnotation(data, sel, block, order);
 			placement = res.placement;
 			return res.data;
-		});
+		}, 'the new highlight');
 		return placement!;
 	}
 	/** Every annotation file found by its `<frontmatterKey>` property, by document. */

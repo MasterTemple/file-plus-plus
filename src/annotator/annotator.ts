@@ -11,6 +11,7 @@ import { askForComment, confirmDeleteHighlight } from './comment-modal';
 import { getComment, removeHighlight, setComment } from './comment-utils';
 import { HighlightIndex, type HighlightEntry } from './highlight-index';
 import { ImportModal } from './import';
+import { NoteHistory } from './note-history';
 import { pickHint, pickSentence, pickWords, type Spot } from '../obsidian/sentence-hints';
 
 /**
@@ -23,10 +24,13 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	/** Links from notes into the format's documents. */
 	index!: HighlightIndex;
 	readonly annotations: Annotations;
+	/** Undo / redo for what it writes into notes */
+	readonly history: NoteHistory;
 	private calloutStyle: HTMLStyleElement | null = null;
 
 	constructor(readonly plugin: FilePlusPlusPlugin<Doc, R>) {
-		this.annotations = new Annotations(plugin as unknown as FilePlusPlusPlugin);
+		this.history = new NoteHistory(plugin.app, (m, t) => plugin.notice(m, t));
+		this.annotations = new Annotations(plugin as unknown as FilePlusPlusPlugin, this.history);
 	}
 
 	/** Called from the plugin's `onload`. */
@@ -134,16 +138,25 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 					return true;
 				},
 			});
-		this.plugin.addCommand({
-			id: 'select-highlight',
-			name: 'Select a highlight in view (by its label)',
-			checkCallback: (checking) => {
-				const v = this.plugin.activeView();
-				if (!v?.reader) return false;
-				if (!checking) this.pickHighlight(v);
-				return true;
-			},
-		});
+		for (const [id, name, comments] of [
+			['select-highlight', 'Select a highlight in view (by its label)', false],
+			['select-comment', 'Select a highlight with a comment in view (by its label)', true],
+		] as const)
+			this.plugin.addCommand({
+				id,
+				name,
+				checkCallback: (checking) => {
+					const v = this.plugin.activeView();
+					if (!v?.reader) return false;
+					if (!checking) this.pickHighlight(v, comments);
+					return true;
+				},
+			});
+		for (const [id, name, redo] of [
+			['undo', 'Undo the last change to a note (highlights, comments)', false],
+			['redo', 'Redo the last change to a note undone', true],
+		] as const)
+			this.plugin.addCommand({ id, name, callback: () => void (redo ? this.history.redo() : this.history.undo()) });
 		const copyCommand = (id: string, title: string, target: () => CopyTarget | null) =>
 			this.plugin.addCommand({
 				id,
@@ -222,14 +235,15 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		if (!shown) this.plugin.notice(s.hintKeys.trim() ? 'no sentences in view.' : 'no keys to label sentences with (Settings → keys).');
 	}
 
-	/** Label the highlights in view; the one picked is selected (`ViewAnnotator.select`) */
-	pickHighlight(view: DocumentView<Doc, R>): void {
+	/** Label the highlights (`comments`: with a comment) in view; the one picked is selected (`ViewAnnotator.select`) */
+	pickHighlight(view: DocumentView<Doc, R>, comments = false): void {
 		const reader = view.reader;
 		if (!reader) return;
 		const ids = new Map<Range, string>();
 		const spots: Spot[] = [];
 		if (!reader.highlightsAreHidden)
 			for (const h of reader.getHighlights()) {
+				if (comments && !(h.data as HighlightEntry | undefined)?.comment) continue;
 				const range = reader.highlightRange(h.id);
 				const line = range && reader.lineOnScreen(range);
 				if (!range || !line) continue;
@@ -245,7 +259,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		};
 		if (spots.length === 1) return select(spots[0].range);
 		if (!spots.length || !pickHint(view as unknown as DocumentView, spots, this.plugin.settings.hintKeys, () => this.hintColor(view), select))
-			this.plugin.notice(spots.length ? 'no keys to label highlights with (Settings → keys).' : 'no highlights in view.');
+			this.plugin.notice(spots.length ? 'no keys to label highlights with (Settings → keys).' : comments ? 'no comments in view.' : 'no highlights in view.');
 	}
 
 	/** Re-register the per-format copy commands (after formats are added, renamed or removed). Hotkeys are kept by id. */
@@ -356,7 +370,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		const file = this.plugin.app.vault.getFileByPath(entry.sourcePath);
 		if (!file || comment.trim() === (entry.comment ?? '')) return;
 		let failed = false;
-		await this.plugin.app.vault.process(file, (data) => {
+		await this.history.process(file, (data) => {
 			let start = entry.position.start.offset;
 			if (data.slice(start, entry.position.end.offset) !== entry.original) {
 				start = data.indexOf(entry.original);
@@ -370,7 +384,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			const next = data.slice(0, start) + stamped + data.slice(end);
 			const line = next.slice(0, start).split('\n').length - 1;
 			return setComment(next.split('\n'), line, comment, entry.color ?? null).join('\n');
-		});
+		}, comment.trim() ? 'the comment' : 'removing the comment');
 		if (failed) this.plugin.notice('could not find the link in the note (it may have changed).');
 	}
 
@@ -387,14 +401,14 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		const comment = getComment(data.split('\n'), data.slice(0, at).split('\n').length - 1);
 		if (comment && !force && !(await confirmDeleteHighlight(this.plugin.app, comment))) return;
 		let failed = false;
-		await this.plugin.app.vault.process(file, (d) => {
+		await this.history.process(file, (d) => {
 			const start = findLink(d, entry);
 			if (start === -1) {
 				failed = true;
 				return d;
 			}
 			return removeHighlight(d, start, start + entry.original.length);
-		});
+		}, 'deleting the highlight');
 		if (failed) this.plugin.notice('could not find the link in the note (it may have changed).');
 	}
 
@@ -403,7 +417,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		const file = this.plugin.app.vault.getFileByPath(entry.sourcePath);
 		if (!file) return;
 		let failed = false;
-		await this.plugin.app.vault.process(file, (data) => {
+		await this.history.process(file, (data) => {
 			let start = entry.position.start.offset;
 			let end = entry.position.end.offset;
 			if (data.slice(start, end) !== entry.original) {
@@ -418,7 +432,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			const next = data.slice(0, start) + updated + data.slice(end);
 			const lineNo = next.slice(0, start).split('\n').length - 1;
 			return setCalloutColor(next.split('\n'), lineNo, color).join('\n');
-		});
+		}, 'the color');
 		if (failed) this.plugin.notice('could not find the link in the note (it may have changed).');
 	}
 

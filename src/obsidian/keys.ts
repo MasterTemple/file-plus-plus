@@ -5,6 +5,7 @@ import type { ReaderKeyAction } from './settings';
 import { chordOf, parseBinding, SequenceMatcher } from './key-sequence';
 import type { Place } from './jump-list';
 import { KeyScroller } from './key-scroll';
+import { SEARCH_OPTION_KEYS } from './sidebar';
 import { endSentenceHints, recolorSentenceHints, sentenceHintKey, sentenceHintsShown } from './sentence-hints';
 
 /** Whether the focus is where a key types (an input, a comment, the editor), so reader keys leave it alone. */
@@ -69,6 +70,10 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'next-comment': () => command('next-comment'),
 		'prev-comment': () => command('previous-comment'),
 		'select-highlight': () => command('select-highlight'),
+		'select-comment': () => command('select-comment'),
+		'select-footnote': (v) => v.pickFootnote(),
+		undo: () => command('undo'),
+		redo: () => command('redo'),
 	};
 	const command = (id: string) => (plugin.app as any).commands.executeCommandById(`${plugin.manifest.id}:${id}`);
 	const scroller = new KeyScroller();
@@ -154,6 +159,8 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		const mode = sidebar.keysMode();
 		if (mode && !v.sidebarTabShown(mode === 'toc' ? 'toc' : 'search')) sidebar.setKeyMode(null);
 		else if (!mode) {
+			// A footnote shown: Enter goes there, Escape closes it
+			if (v.reader?.notePreviewShown && (chord === 'Enter' || chord === 'Escape')) return () => (chord === 'Enter' ? v.reader!.followNotePreview() : v.reader!.hideNotePreview());
 			// In the text: the search results stop being drawn (n / N show them again)
 			if (chord === 'Escape' && sidebar.resultsDrawn()) return () => sidebar.hideResults();
 		} else if (mode === 'toc') {
@@ -168,6 +175,8 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 			if (chord === 'Escape') return () => v.backToText();
 		} else if (mode === 'results') {
 			if (chord === 'ArrowDown' || chord === 'ArrowUp') return () => sidebar.moveResults(chord === 'ArrowDown' ? 1 : -1);
+			const option = SEARCH_OPTION_KEYS[chord];
+			if (option) return () => sidebar.toggleSearchOption(option);
 			if (chord === 'Enter' || chord === 'Escape') return () => v.backToText();
 		}
 		return null;

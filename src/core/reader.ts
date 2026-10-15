@@ -1142,6 +1142,49 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		} else this.registry?.delete(name);
 	}
 
+	/** Footnotes shown over the text (see note-preview.ts) */
+	private notes: NotePreview | null = null;
+
+	/** The links to footnotes in view, each with where it starts (as `visibleSentences`) */
+	visibleNoteLinks(): { range: Range; x: number; y: number }[] {
+		const notes = this.notes;
+		if (!notes || !this.scroller.isConnected || !this.scroller.clientHeight) return [];
+		const view = this.scroller.getBoundingClientRect();
+		const out: { range: Range; x: number; y: number }[] = [];
+		for (const a of Array.from(this.content.querySelectorAll('a[data-fpp-href]'))) {
+			const r = a.getBoundingClientRect();
+			if (r.bottom <= view.top || r.top >= view.bottom || !r.height) continue;
+			if (!notes.noteLinkAt(a)) continue;
+			const range = this.doc.createRange();
+			range.selectNode(a);
+			const line = this.lineInView(range, view);
+			if (line) out.push({ range, x: line.left, y: line.top });
+		}
+		return out;
+	}
+
+	/** Shows the footnote of a note link (`range`: around it, as `visibleNoteLinks` gives it) */
+	showNoteOf(range: Range): boolean {
+		const a = range.startContainer.childNodes[range.startOffset];
+		const hit = a && this.notes?.noteLinkAt(a);
+		if (!hit) return false;
+		this.notes!.show(hit.a, hit.href, hit.note);
+		return true;
+	}
+
+	get notePreviewShown(): boolean {
+		return !!this.notes?.shown;
+	}
+
+	/** Goes to the footnote shown */
+	followNotePreview(): void {
+		this.notes?.followShown();
+	}
+
+	hideNotePreview(): void {
+		this.notes?.hide();
+	}
+
 	/** Mark a highlight as the one keys act on (underlined; null: none) */
 	setSelectedHighlight(range: Range | null): void {
 		const name = this.hlName('selected');
@@ -1443,7 +1486,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 			if (!this.onInternalLink?.(href, e)) this.goTo(href);
 		};
 		// Footnotes: shown on hovering (or tapping) their links
-		const notes = new NotePreview({
+		const notes = (this.notes = new NotePreview({
 			doc: this.doc,
 			scroller: this.scroller,
 			content: this.content,
@@ -1454,7 +1497,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 				return node && node.nodeType === 1 ? (node as Element) : null;
 			},
 			follow,
-		});
+		}));
 		this.cleanup.push(() => notes.hide());
 		let touchedAt = 0;
 		on(this.scroller, 'touchstart', (e) => {

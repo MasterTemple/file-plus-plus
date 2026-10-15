@@ -12,6 +12,7 @@ import { MarginComments, type ProviderNotes } from '../annotator/margin-comments
 import { layerId, type Annotation, type AnnotationContext, type AnnotationProvider } from './api';
 import { hoverLink } from './hover';
 import { JumpList, type Place } from './jump-list';
+import { pickHint } from './sentence-hints';
 
 /** Annotations under the pointer, grouped by their provider. */
 interface AnnotationGroup {
@@ -583,6 +584,16 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 
 	refreshHighlights(): void {
 		this.annotations.refreshHighlights();
+	}
+
+	/** Labels the footnote links in view; the one picked shows its note */
+	pickFootnote(): void {
+		const reader = this.reader;
+		if (!reader) return;
+		const spots = reader.visibleNoteLinks();
+		if (spots.length === 1) return void reader.showNoteOf(spots[0].range);
+		if (!spots.length || !pickHint(this as unknown as DocumentView, spots, this.plugin.settings.hintKeys, () => '#d4d4d4', (range) => reader.showNoteOf(range)))
+			this.plugin.notice(spots.length ? 'no keys to label footnotes with (Settings → keys).' : 'no footnotes in view.');
 	}
 
 	/** A reader key for a highlight selected in this view (`select-highlight`); true: it was used */

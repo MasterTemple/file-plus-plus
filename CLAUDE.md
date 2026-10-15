@@ -35,8 +35,9 @@ src/obsidian/    the viewer (`file-plus-plus/viewer`): knows nothing of notes
   viewer.ts / index.ts  exports: the viewer / everything (`file-plus-plus/obsidian`)
 src/annotator/  the note-taking layer (`file-plus-plus/annotator`): links in notes are highlights
   annotator.ts  Annotator (`plugin.annotator`): the highlight index and its events, highlight actions (open source, comment, color, delete), copying and templates, annotation files, saving provider annotations, Backlinks hover, its commands
-  view-annotator.ts  ViewAnnotator (`view.annotations`): drawing highlights, margin comments, the highlight menu, comment editing, mobile gestures on highlights, the copy/insert row; the selected highlight (`f h`, or one just made with the keys: `handleKey` takes number keys, `c`, `d` / `d y`, via `view.onReaderKey`; followed by range, since ids are note offsets)
+  view-annotator.ts  ViewAnnotator (`view.annotations`): drawing highlights, margin comments, the highlight menu, comment editing, mobile gestures on highlights, the copy/insert row; the selected highlight (`s h` / `s c`, or one just made with the keys: `handleKey` takes number keys, `c`, `d` / `d y`, via `view.onReaderKey`; followed by range, since ids are note offsets)
   highlight-index.ts, annotations.ts (annotation files), comment-*.ts, margin-comments.ts
+  note-history.ts  NoteHistory (`annotator.history`): undo / redo (Ctrl+Z / Ctrl+Y) of what the annotator writes into notes; write through `history.process` / `create` so it's undoable (import and folder moves aren't)
   annotation-folder.ts  AnnotationFolderModal: *Change annotation folder…* (`annotations.planMove` / `move`: renames, then `mergeAnnotationText` for a document's extra files, `retargetLinks` for links to them)
   import.ts     ImportModal + importHighlights: JSON → annotation files (opens each document's view to resolve passages, dedupes by resolved passage + comment); parsing in import-utils.ts (pure)
   notes.ts      pure note-text logic (annotation placement, comments, links) — importable without Obsidian (`file-plus-plus/notes`)

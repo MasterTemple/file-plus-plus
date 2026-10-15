@@ -112,6 +112,13 @@ export class NotePreview {
 		if (href) this.host.follow(href, e);
 	}
 
+	/** Goes to the note shown */
+	followShown(): void {
+		const href = this.el?.getAttribute('data-href');
+		this.hide();
+		if (href) this.host.follow(href, new MouseEvent('click'));
+	}
+
 	show(a: Element, href: string, note: Element): void {
 		const { doc, scroller } = this.host;
 		this.hide();

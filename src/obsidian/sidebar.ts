@@ -10,6 +10,11 @@ import { timeAgo } from '../annotator/margin-comments';
 /** `toc`, `search`, `highlights`, or `provider:<id>` for another plugin's annotations. */
 type Tab = string;
 
+export type SearchOption = 'caseSensitive' | 'wholeWord' | 'regex';
+
+/** The keys (as `chordOf` gives them) that toggle the search options, in the search box and its results */
+export const SEARCH_OPTION_KEYS: Record<string, SearchOption> = { 'Alt+c': 'caseSensitive', 'Alt+w': 'wholeWord', 'Alt+r': 'regex' };
+
 /** In-view sidebar (PDF++-style): table of contents, search, and highlights in this document. */
 export class Sidebar {
 	private tabs = new Map<Tab, { button: HTMLElement; panel: HTMLElement }>();
@@ -295,17 +300,14 @@ export class Sidebar {
 		const row = panel.createDiv('fpp-search-row search-input-container');
 		this.searchInput = row.createEl('input', { type: 'search', attr: { placeholder: `Search ${this.noun}…`, spellcheck: 'false' } });
 		const toggles = panel.createDiv('fpp-search-toggles');
-		const toggle = (key: keyof typeof this.opts, label: string, title: string) => {
+		const toggle = (key: SearchOption, label: string, title: string) => {
 			const b = toggles.createDiv({ cls: 'fpp-search-toggle', text: label, attr: { 'aria-label': title } });
-			b.addEventListener('click', () => {
-				this.opts[key] = !this.opts[key];
-				b.toggleClass('is-active', this.opts[key]);
-				this.runSearch();
-			});
+			this.optionButtons[key] = b;
+			b.addEventListener('click', () => this.toggleSearchOption(key));
 		};
-		toggle('caseSensitive', 'Aa', 'Match case');
-		toggle('wholeWord', 'ab', 'Whole word');
-		toggle('regex', '.*', 'Regular expression');
+		toggle('caseSensitive', 'Aa', 'Match case (Alt+C)');
+		toggle('wholeWord', 'ab', 'Whole word (Alt+W)');
+		toggle('regex', '.*', 'Regular expression (Alt+R)');
 		const nav = toggles.createDiv('fpp-search-nav');
 		this.searchInfo = nav.createDiv('fpp-search-info');
 		const prev = nav.createDiv({ cls: 'clickable-icon', attr: { 'aria-label': 'Previous (Shift+Enter)' } });
@@ -350,6 +352,14 @@ export class Sidebar {
 			});
 		});
 		this.searchInput.addEventListener('keydown', (e) => {
+			// Alt+C / Alt+W / Alt+R: the options (by the key's letter: Option+C is ç on a Mac)
+			const option = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && SEARCH_OPTION_KEYS[`Alt+${e.code.replace(/^Key/, '').toLowerCase()}`];
+			if (option) {
+				e.preventDefault();
+				e.stopPropagation();
+				this.toggleSearchOption(option);
+				return;
+			}
 			if (e.key === 'Enter') {
 				e.preventDefault();
 				if (this.searchInput && this.searchInput.value !== this.lastQuery) this.runSearch();
@@ -372,6 +382,14 @@ export class Sidebar {
 	}
 
 	private lastQuery = '';
+	private optionButtons: Partial<Record<SearchOption, HTMLElement>> = {};
+
+	/** Turns a search option on or off, and searches again */
+	toggleSearchOption(key: SearchOption): void {
+		this.opts[key] = !this.opts[key];
+		this.optionButtons[key]?.toggleClass('is-active', this.opts[key]);
+		this.runSearch();
+	}
 
 	/** Build the text index in the background so the first keystroke doesn't stall (slow phones). */
 	private warmIndex(): void {
