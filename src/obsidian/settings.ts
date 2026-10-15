@@ -142,6 +142,8 @@ export interface FppSettings {
 	colorInLinks: boolean;
 	/** Stamp highlight links with `&updated=` when they are created and when their color or comment changes. */
 	timestampInLinks: boolean;
+	/** Edit comments with Vim keys (desktop) */
+	commentVim: boolean;
 	/** Show highlights' comments (and annotations' notes) beside the text, when the pane is wide enough. */
 	marginComments: boolean;
 	highlightOpacity: number;
@@ -279,6 +281,7 @@ export const DEFAULT_SETTINGS: FppSettings = {
 	colorInLinks: true,
 	timestampInLinks: true,
 	marginComments: true,
+	commentVim: false,
 	highlightOpacity: 0.4,
 	linkType: 'primary',
 	linkStyle: 'auto',

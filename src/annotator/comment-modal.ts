@@ -1,9 +1,28 @@
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { EditorState } from '@codemirror/state';
+import { drawSelection, EditorView, keymap } from '@codemirror/view';
+import { getCM, Vim, vim } from '@replit/codemirror-vim';
 import { Modal, Platform, Setting, type App } from 'obsidian';
 
 export interface CommentPromptOptions {
 	title?: string;
 	initial?: string;
 	submit?: string;
+	/** Edit with Vim keys (desktop only: `commentVim`) */
+	vim?: boolean;
+}
+
+/** The comment modals with a Vim editor, for `:w` / `:q` */
+const vimModals = new WeakMap<EditorView, CommentModal>();
+let exDefined = false;
+
+/** `:w`, `:wq`, `:x` save the comment, `:q` cancels */
+function defineEx(): void {
+	if (exDefined) return;
+	exDefined = true;
+	const modal = (cm: { cm6?: EditorView }) => (cm.cm6 ? vimModals.get(cm.cm6) : undefined);
+	for (const [name, short] of [['write', 'w'], ['wq', 'wq'], ['xit', 'x']]) Vim.defineEx(name, short, (cm: { cm6?: EditorView }) => modal(cm)?.submit());
+	Vim.defineEx('quit', 'q', (cm: { cm6?: EditorView }) => modal(cm)?.close());
 }
 
 /** Ask for a comment to put under a quote. Resolves to null when cancelled. */
@@ -34,21 +53,66 @@ class CommentModal extends Modal {
 			cls: 'fpp-comment-quote',
 			text: this.quote.length > 400 ? `${this.quote.slice(0, 400)}…` : this.quote,
 		});
-		const area = contentEl.createEl('textarea', { cls: 'fpp-comment-input', attr: { rows: Platform.isMobile ? '3' : '5', placeholder: 'Your comment…' } });
-		area.value = this.value;
-		area.addEventListener('input', () => (this.value = area.value));
-		area.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-				e.preventDefault();
-				this.submit();
-			}
-		});
+		const vimKeys = !!this.opts.vim && !Platform.isMobile;
+		let focus: () => void;
+		if (vimKeys) focus = this.vimEditor(contentEl);
+		else {
+			const area = contentEl.createEl('textarea', { cls: 'fpp-comment-input', attr: { rows: Platform.isMobile ? '3' : '5', placeholder: 'Your comment…' } });
+			area.value = this.value;
+			area.addEventListener('input', () => (this.value = area.value));
+			area.addEventListener('keydown', (e) => {
+				if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+					e.preventDefault();
+					this.submit();
+				}
+			});
+			focus = () => area.focus();
+		}
 		new Setting(contentEl)
-			.setDesc(Platform.isMobile ? '' : 'Ctrl/Cmd+Enter to confirm')
+			.setDesc(Platform.isMobile ? '' : vimKeys ? 'Ctrl/Cmd+Enter or :w to confirm, :q to cancel' : 'Ctrl/Cmd+Enter to confirm')
 			.addButton((b) => b.setButtonText('Cancel').onClick(() => this.close()))
 			.addButton((b) => b.setButtonText(this.opts.submit ?? 'Copy').setCta().onClick(() => this.submit()));
-		window.setTimeout(() => area.focus(), 50);
+		window.setTimeout(focus, 50);
 	}
+
+	/**
+	 * A CodeMirror editor with Vim keys (new comments start in insert mode). Escape stays in it (Vim's)
+	 * rather than closing the dialog. Returns what focuses it.
+	 */
+	private vimEditor(parent: HTMLElement): () => void {
+		defineEx();
+		const view = new EditorView({
+			parent: parent.createDiv('fpp-comment-input fpp-comment-vim'),
+			state: EditorState.create({
+				doc: this.value,
+				extensions: [
+					vim(),
+					drawSelection(),
+					history(),
+					EditorView.lineWrapping,
+					keymap.of([{ key: 'Mod-Enter', run: () => (this.submit(), true) }, ...defaultKeymap, ...historyKeymap]),
+					EditorView.updateListener.of((u) => {
+						if (u.docChanged) this.value = u.state.doc.toString();
+					}),
+				],
+			}),
+		});
+		vimModals.set(view, this);
+		this.editor = view;
+		// The dialog's Escape (closing it) goes to Vim instead
+		const scope = this.scope as unknown as { keys: { key: string | null }[] };
+		scope.keys = scope.keys.filter((k) => k.key !== 'Escape');
+		this.scope.register([], 'Escape', () => true);
+		return () => {
+			view.focus();
+			const end = view.state.doc.length;
+			view.dispatch({ selection: { anchor: end } });
+			const cm = getCM(view);
+			if (cm && !this.value) Vim.handleKey(cm, 'i', 'user');
+		};
+	}
+
+	private editor: EditorView | null = null;
 
 	/**
 	 * Mobile: pin the dialog to the top of the visible area, where the on-screen keyboard can't cover
@@ -79,7 +143,7 @@ class CommentModal extends Modal {
 
 	private stopFit: (() => void) | null = null;
 
-	private submit(): void {
+	submit(): void {
 		this.done = true;
 		this.resolve(this.value.trim());
 		this.close();
@@ -87,6 +151,8 @@ class CommentModal extends Modal {
 
 	override onClose(): void {
 		this.stopFit?.();
+		this.editor?.destroy();
+		this.editor = null;
 		if (!this.done) this.resolve(null);
 		this.contentEl.empty();
 	}

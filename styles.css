@@ -520,6 +520,21 @@ body.fpp-drawer-open .mobile-navbar {
 	min-height: 6em;
 	resize: vertical;
 }
+.fpp-comment-vim {
+	resize: none;
+	box-sizing: border-box;
+	max-height: 40vh;
+	overflow: auto;
+	border: var(--input-border-width, 1px) solid var(--background-modifier-border);
+	border-radius: var(--input-radius, 5px);
+	background: var(--background-modifier-form-field);
+}
+.fpp-comment-vim .cm-editor { min-height: 6em; }
+.fpp-comment-vim .cm-editor.cm-focused { outline: none; }
+.fpp-comment-vim .cm-content { padding: var(--size-4-1) var(--size-4-2); font-family: var(--font-text); caret-color: var(--text-normal); }
+.fpp-comment-vim .cm-fat-cursor { background: var(--text-accent) !important; color: var(--text-on-accent) !important; }
+.fpp-comment-vim .cm-vim-panel { padding: 2px 6px; font-family: var(--font-monospace); border-top: 1px solid var(--background-modifier-border); }
+.fpp-comment-vim .cm-vim-panel input { border: none; background: transparent; outline: none; font-family: inherit; color: var(--text-normal); }
 .fpp-comment-modal .setting-item {
 	border-top: none;
 	padding-bottom: 0;

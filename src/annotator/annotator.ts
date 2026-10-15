@@ -302,7 +302,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		let what: CopyTarget | null;
 		let comment = '';
 		if (withComment) {
-			const c = await askForComment(this.plugin.app, info.text);
+			const c = await askForComment(this.plugin.app, info.text, { vim: this.plugin.settings.commentVim });
 			if (c === null) return;
 			comment = c;
 			what = this.plugin.settings.copyFormats.find((f) => needsComment(f.template)) ?? { id: '', name: 'Callout with comment', template: COMMENT_TEMPLATE };
@@ -528,7 +528,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	async copy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, copyOnly = false, newFileMode?: AnnotationMode): Promise<void> {
 		let comment = '';
 		if (this.asksForComment(what)) {
-			const c = await askForComment(this.plugin.app, info.text);
+			const c = await askForComment(this.plugin.app, info.text, { vim: this.plugin.settings.commentVim });
 			if (c === null) return;
 			comment = c;
 		}

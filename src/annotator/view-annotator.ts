@@ -221,6 +221,7 @@ export class ViewAnnotator<Doc = unknown, R extends DocumentReader = DocumentRea
 			title: entry.comment ? 'Edit comment' : 'Add comment',
 			initial: entry.comment ?? '',
 			submit: 'Save',
+			vim: this.view.plugin.settings.commentVim,
 		});
 		if (comment === null) return;
 		await this.view.plugin.annotator.setHighlightComment(entry, comment);

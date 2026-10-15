@@ -645,6 +645,15 @@ export class FppSettingTab extends PluginSettingTab {
 				}),
 			);
 		new Setting(highlights.items)
+			.setName('Vim keys in the comment editor')
+			.setDesc(md('Edit comments with Vim keys (desktop): a new comment starts in insert mode, Escape goes to normal mode instead of closing, `:w` (or Ctrl/Cmd+Enter) saves, `:q` cancels.'))
+			.addToggle((t) =>
+				t.setValue(s.commentVim).onChange(async (v) => {
+					s.commentVim = v;
+					await save();
+				}),
+			);
+		new Setting(highlights.items)
 			.setName('Links without a color')
 			.setDesc(md('For links that have no `&color=…`.'))
 			.addDropdown((d) =>
