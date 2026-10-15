@@ -596,6 +596,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			this.plugin.notice(spots.length ? 'no keys to label footnotes with (Settings → keys).' : 'no footnotes in view.');
 	}
 
+	/** Copies the selected text (`y`) */
+	yankSelection(): void {
+		void this.plugin.annotator.yankSelection(this);
+	}
+
 	/** A reader key for a highlight selected in this view (`select-highlight`); true: it was used */
 	onReaderKey(chord: string): boolean {
 		return this.annotations.handleKey(chord);

@@ -63,6 +63,8 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		'hint-comment': () => command('comment-on-sentence'),
 		'hint-words-highlight': () => command('highlight-words'),
 		'hint-words-comment': () => command('comment-on-words'),
+		'visual-sentence': () => command('select-sentence'),
+		'visual-words': () => command('select-words'),
 		comments: () => command('toggle-margin-comments'),
 		highlights: () => command('toggle-highlights'),
 		'next-highlight': () => command('next-highlight'),
@@ -161,6 +163,9 @@ export function registerReaderKeys(plugin: FilePlusPlusPlugin): void {
 		else if (!mode) {
 			// A footnote shown: Enter goes there, Escape closes it
 			if (v.reader?.notePreviewShown && (chord === 'Enter' || chord === 'Escape')) return () => (chord === 'Enter' ? v.reader!.followNotePreview() : v.reader!.hideNotePreview());
+			// Text selected: y copies it, Escape lets go (h / c are bindings: they highlight it, comment on it)
+			if ((chord === 'y' || chord === 'Escape') && v.reader?.getSelection()?.text.trim())
+				return () => (chord === 'y' ? v.yankSelection() : v.reader!.clearSelection());
 			// In the text: the search results stop being drawn (n / N show them again)
 			if (chord === 'Escape' && sidebar.resultsDrawn()) return () => sidebar.hideResults();
 		} else if (mode === 'toc') {

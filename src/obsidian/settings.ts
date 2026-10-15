@@ -60,6 +60,8 @@ export const READER_KEY_ACTIONS = [
 	{ id: 'hint-comment', key: 'c', name: 'Comment on a sentence', desc: 'Likewise, with the copy format for comments.' },
 	{ id: 'hint-words-highlight', key: 'H', name: 'Highlight from a word to a word', desc: 'Likewise, picking where the highlight starts and ends, word by word (as chosen below).' },
 	{ id: 'hint-words-comment', key: 'C', name: 'Comment from a word to a word' },
+	{ id: 'visual-sentence', key: 'v', name: 'Select a sentence', desc: 'Labels the sentences in view as h does (Shift on a label: words in it), and selects the one picked. Then h highlights it, c comments on it, y copies its text, Escape lets go.' },
+	{ id: 'visual-words', key: 'V', name: 'Select from a word to a word', desc: 'Likewise, picking word by word as H does.' },
 	{ id: 'comments', key: 'g c', name: 'Toggle comments in the margin' },
 	{ id: 'highlights', key: 'g h', name: 'Toggle highlights' },
 ] as const;

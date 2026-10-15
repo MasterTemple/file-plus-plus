@@ -138,6 +138,20 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 					return true;
 				},
 			});
+		for (const [id, name, words] of [
+			['select-sentence', 'Select a sentence in view (by its label)', false],
+			['select-words', 'Select from a word to a word in view (by their labels)', true],
+		] as const)
+			this.plugin.addCommand({
+				id,
+				name,
+				checkCallback: (checking) => {
+					const v = this.plugin.activeView();
+					if (!v?.reader) return false;
+					if (!checking) this.selectPassage(v, words);
+					return true;
+				},
+			});
 		for (const [id, name, comments] of [
 			['select-highlight', 'Select a highlight in view (by its label)', false],
 			['select-comment', 'Select a highlight with a comment in view (by its label)', true],
@@ -225,14 +239,40 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			view.reader!.clearSelection();
 			return void picked(selection.range);
 		}
+		this.pickRange(view, words, color, (range) => void picked(range));
+	}
+
+	/**
+	 * Picks a passage in view by labels: a sentence (Shift on its label: from a word to a word in it),
+	 * or with `words` from a word to a word.
+	 */
+	private pickRange(view: DocumentView<Doc, R>, words: boolean, color: () => string, onPick: (range: Range) => void): void {
+		const s = this.plugin.settings;
 		const v = view as unknown as DocumentView;
 		const wordOpts = { flow: s.wordHintFlow, startPunctuation: s.hintStartPunctuation, endPunctuation: s.hintEndPunctuation };
 		const shown = words
-			? pickWords(v, s.hintKeys, color, wordOpts, picked)
+			? pickWords(v, s.hintKeys, color, wordOpts, onPick)
 			: pickSentence(v, s.hintKeys, color, (range, shifted) => {
-					if (!shifted || !pickWords(v, s.hintKeys, color, { ...wordOpts, within: range }, picked)) void picked(range);
+					if (!shifted || !pickWords(v, s.hintKeys, color, { ...wordOpts, within: range }, onPick)) onPick(range);
 				});
 		if (!shown) this.plugin.notice(s.hintKeys.trim() ? 'no sentences in view.' : 'no keys to label sentences with (Settings → keys).');
+	}
+
+	/** Selects a passage picked by labels (as `pickPassage`), for `h` / `c` / `y` next */
+	selectPassage(view: DocumentView<Doc, R>, words = false): void {
+		this.pickRange(view, words, () => '#d4d4d4', (range) => view.reader?.select(range));
+	}
+
+	/** Copies the selection's plain text (`y` on a selection) */
+	async yankSelection(view: DocumentView<Doc, R>): Promise<boolean> {
+		const reader = view.reader;
+		const info = reader?.getSelection();
+		if (!reader || !info?.text.trim()) return false;
+		await navigator.clipboard.writeText(info.text);
+		reader.clearSelection();
+		reader.flash(info.range);
+		new Notice('Copied text to clipboard');
+		return true;
 	}
 
 	/** Label the highlights (`comments`: with a comment) in view; the one picked is selected (`ViewAnnotator.select`) */
