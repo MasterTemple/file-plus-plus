@@ -170,7 +170,8 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 				if (!p) return;
 				for (const v of this.views()) if (v.file && (!paths || paths.includes(v.file.path))) v.updateProvider(p);
 			},
-			open: (file, locator) => this.openDocument(file, locator ?? ''),
+			open: (file, locator, options) =>
+				this.openDocument(file, locator ? `#${locator.replace(/^#/, '')}` : '', options?.newLeaf, options?.asLink && locator ? { eState: { link: true } } : undefined),
 			link: (file, locator, alias, sourcePath) => this.documentLink(file, locator, alias, null, sourcePath),
 		};
 	}

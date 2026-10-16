@@ -1,4 +1,4 @@
-import type { App, Menu, TFile } from 'obsidian';
+import type { App, Menu, PaneType, TFile } from 'obsidian';
 
 /**
  * The API other plugins use: `app.plugins.plugins['<plugin id>']?.api`, available once the workspace
@@ -31,8 +31,11 @@ export interface FileApi {
 	registerAnnotationProvider<T>(provider: AnnotationProvider<T>): () => void;
 	/** Ask the plugin to fetch a provider's annotations again (for some paths, or all open documents). */
 	refreshAnnotations(providerId: string, paths?: string[]): void;
-	/** Open a document (reusing its tab) and jump to a locator. */
-	open(file: TFile, locator?: string): Promise<void>;
+	/**
+	 * Open a document (reusing its tab, unless `newLeaf`) and jump to a locator. With `asLink`, it opens
+	 * as a link to the passage would: the passage flashes, and margin comments hide per the settings.
+	 */
+	open(file: TFile, locator?: string, options?: { newLeaf?: PaneType | boolean; asLink?: boolean }): Promise<void>;
 	/** A wiki or markdown link to a locator, in the user's link style. */
 	link(file: TFile, locator: string, alias: string, sourcePath?: string): string;
 }
