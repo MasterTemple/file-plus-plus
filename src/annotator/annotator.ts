@@ -232,7 +232,8 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			} finally {
 				reader.setPendingSelection(null);
 			}
-			reader.flash(range, { color: color() });
+			// A blink: the highlight itself shows where it went
+			reader.flash(range, { color: color(), duration: 250, fade: 200 });
 			view.annotations.selectWhenDrawn(range);
 		};
 		const selection = view.reader?.getSelection();

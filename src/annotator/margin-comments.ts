@@ -123,23 +123,16 @@ export class MarginComments extends Component {
 	}
 
 	/**
-	 * The highlight of the comment being looked at (hovered or selected) stands out: the others are
-	 * dimmed (unless this device turned that off: `dimHighlights`), or, with highlights hidden, it alone is drawn.
+	 * The highlight of the comment being looked at (hovered or selected) stands out: it brightens, or,
+	 * with highlights hidden, it alone is drawn.
 	 */
 	private syncReveal(): void {
 		const reader = this.view.reader;
 		if (!reader) return;
-		const { plugin } = this.view;
-		const hidden = plugin.settings.hideHighlights;
-		if (!hidden && !plugin.dimHighlights) return reader.setFocusedHighlights([]);
+		const hidden = this.view.plugin.settings.hideHighlights;
 		const ids = [this.cardHover, this.activeShown ? this.activeHighlight() : null].filter((x): x is string => !!x);
 		if (!hidden) ids.push(...this.textHover);
 		reader.setFocusedHighlights(ids);
-	}
-
-	/** Settings changed (`dimHighlights`): draw the highlights again. */
-	refreshReveal(): void {
-		this.syncReveal();
 	}
 
 	private applyHover(): void {

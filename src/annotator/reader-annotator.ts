@@ -134,6 +134,7 @@ export class ReaderAnnotator<Doc = unknown, R extends DocumentReader = DocumentR
 				if (Platform.isMobile) return;
 				this.overHighlight = specs.length > 0;
 				if (this.overHighlight) this.tip.hide();
+				reader.setFocusedHighlights(specs.map((s) => s.id));
 				this.card.hover(e, specs.map((s) => s.data as HighlightEntry));
 			}),
 			reader.on('highlight-click', (e, specs) => this.held() || this.showHighlightMenu(specs.map((s) => s.data as HighlightEntry), { x: e.clientX, y: e.clientY })),

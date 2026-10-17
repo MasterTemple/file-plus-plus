@@ -11,10 +11,10 @@ import { Margin } from './margin';
 import { HINT_CSS } from './hints';
 import { NOTE_PREVIEW_CSS, NotePreview } from './note-preview';
 
-/** Strength of highlights dimmed while others are focused. */
-const DIMMED = 0.3;
-/** Length of focus / dim / show / hide transitions of highlights. */
-const HIGHLIGHT_TRANSITION_MS = 180;
+/** Strength of highlights at rest; a focused (hovered) one is drawn at full strength. */
+const RESTING = 0.7;
+/** Length of focus / show / hide transitions of highlights. */
+const HIGHLIGHT_TRANSITION_MS = 90;
 /** How long the pointer may be off highlights before hover ends (crossing the gap between lines). */
 const HOVER_LEAVE_MS = 120;
 
@@ -1016,8 +1016,9 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 	private focused = new Set<string>();
 
 	/**
-	 * Draw attention to some highlights (e.g. the one whose comment is being looked at): the others are
-	 * dimmed, or, while highlights are hidden, only these are drawn. An empty list ends it.
+	 * Draw attention to some highlights (e.g. the one under the pointer, or whose comment is being looked
+	 * at): they brighten from their resting strength, or, while highlights are hidden, only these are drawn.
+	 * Only their own paint changes. An empty list ends it.
 	 */
 	setFocusedHighlights(ids: string[]): void {
 		const next = new Set(ids);
@@ -1049,10 +1050,10 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return { key: `x-${hash(cssColor)}`, css: cssColor };
 	}
 
-	/** Strength a highlight should be drawn at: 1 normal, DIMMED when others are focused, 0 not drawn. */
+	/** Strength a highlight should be drawn at: 1 focused, RESTING otherwise, 0 not drawn. */
 	private targetLevel(id: string): number {
-		if (this.highlightsHidden) return this.focused.has(id) ? 1 : 0;
-		return this.focused.size && !this.focused.has(id) ? DIMMED : 1;
+		if (this.focused.has(id)) return 1;
+		return this.highlightsHidden ? 0 : RESTING;
 	}
 
 	/** Strength each highlight was drawn at when the current transition started (or is drawn at, after it). */
@@ -1078,7 +1079,7 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 
 	/**
 	 * Paint the highlights. With `animate`, each one eases from the strength it is drawn at now to its
-	 * new one (focus, dimming, hiding); otherwise they jump there.
+	 * new one (focus, hiding); otherwise they jump there.
 	 */
 	private refreshHighlights(animate = false): void {
 		if (!this.rendered || !this.HighlightCtor) return;
