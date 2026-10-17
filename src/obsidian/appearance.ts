@@ -38,11 +38,12 @@ export function bookAppearance(plugin: FilePlusPlusPlugin, path: string): Appear
 }
 
 /**
- * Reader appearance controls, shared by the in-view popover and the settings tab.
- * Every change applies live to open views and is persisted.
+ * Reader appearance controls, shared by the in-view popover and the settings tab (and a plugin's
+ * own panes, with their own target). Every change applies live and is persisted. `hidden`: more
+ * settings to leave out than the format's (a pane's: the reading width and margins)
  */
-export function buildAppearanceControls(container: HTMLElement, plugin: FilePlusPlusPlugin, target: AppearanceTarget, onChange?: () => void): void {
-	const hidden = new Set(plugin.format.appearance?.hidden ?? []);
+export function buildAppearanceControls(container: HTMLElement, plugin: FilePlusPlusPlugin, target: AppearanceTarget, onChange?: () => void, hidden: Iterable<keyof ReaderSettings> = []): void {
+	const hide = new Set([...(plugin.format.appearance?.hidden ?? []), ...hidden]);
 	// "Publisher": the document's own styles; null when a format has none (choices read "Default").
 	const publisherName = plugin.format.appearance?.publisherName;
 	const publisher = publisherName === undefined ? 'Publisher' : publisherName;
@@ -167,9 +168,9 @@ export function buildAppearanceControls(container: HTMLElement, plugin: FilePlus
 	track(new Setting(container), 'dimImages')
 		.setName('Dim images in dark themes')
 		.addToggle((t) => t.setValue(s().dimImages).onChange((v) => update({ dimImages: v })));
-	for (const [row, keys] of rows) if (keys.some((k) => hidden.has(k))) row.settingEl.hide();
-	if (hidden.has('fontFamily')) customRow.settingEl.hide();
-	if (hidden.has('lineHeight')) lineRow.settingEl.hide();
+	for (const [row, keys] of rows) if (keys.some((k) => hide.has(k))) row.settingEl.hide();
+	if (hide.has('fontFamily')) customRow.settingEl.hide();
+	if (hide.has('lineHeight')) lineRow.settingEl.hide();
 	mark();
 }
 

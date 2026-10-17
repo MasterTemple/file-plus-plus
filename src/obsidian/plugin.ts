@@ -9,6 +9,8 @@ import { resolveFile, type HighlightEntry } from '../annotator/highlight-index';
 import { formatLink, linkAt } from './link-utils';
 import { COMMENT_TEMPLATE, CONTEXT_FORMAT, DEFAULT_SETTINGS, needsComment, newFormatId, syncMenus, type AppearancePlatform, type Orientation, type CopyFormat, type FppSettings, type LinkPlace, type OpenTarget, type PaletteColor } from './settings';
 import { Annotator } from '../annotator/annotator';
+import type { AnnotationTarget } from '../annotator/target';
+import { ReaderAnnotator, type ReaderAnnotatorOptions } from '../annotator/reader-annotator';
 import { DocumentEmbed, registerEmbeds, type EmbedContext } from './embed';
 import { FppSettingTab } from './setting-tab';
 import { DocumentView } from './view';
@@ -40,6 +42,8 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	readonly annotator = new Annotator<Doc, R>(this);
 	/** Annotation providers registered by other plugins, by id. */
 	readonly providers = new Map<string, AnnotationProvider<unknown>>();
+	/** Highlights in readers outside the format's tabs (embeds, a plugin's own panes): see `annotateReader` */
+	readonly readerAnnotators = new Set<ReaderAnnotator<Doc, R>>();
 	/** For other plugins: see `api.ts`. */
 	api!: FileApi;
 	private savePositionsTimer = 0;
@@ -158,17 +162,18 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 			registerAnnotationProvider: (provider) => {
 				const p = provider as AnnotationProvider<unknown>;
 				this.providers.set(p.id, p);
-				for (const v of this.views()) v.updateProvider(p);
+				for (const v of [...this.views(), ...this.readerAnnotators]) void v.updateProvider(p);
 				return () => {
 					if (this.providers.get(p.id) !== p) return;
 					this.providers.delete(p.id);
-					for (const v of this.views()) v.removeProvider(p.id);
+					for (const v of [...this.views(), ...this.readerAnnotators]) v.removeProvider(p.id);
 				};
 			},
 			refreshAnnotations: (providerId, paths) => {
 				const p = this.providers.get(providerId);
 				if (!p) return;
-				for (const v of this.views()) if (v.file && (!paths || paths.includes(v.file.path))) v.updateProvider(p);
+				for (const v of this.views()) if (v.file && (!paths || paths.includes(v.file.path))) void v.updateProvider(p);
+				for (const a of this.readerAnnotators) if (a.target.file && (!paths || paths.includes(a.target.file.path))) void a.updateProvider(p);
 			},
 			open: (file, locator, options) =>
 				this.openDocument(file, locator ? `#${locator.replace(/^#/, '')}` : '', options?.newLeaf, options?.asLink && locator ? { eState: { link: true } } : undefined),
@@ -186,7 +191,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		this.settings.hiddenProviders = [...set];
 		await this.saveSettings();
 		const p = this.providers.get(id);
-		if (p) for (const v of this.views()) v.updateProvider(p);
+		if (p) for (const v of [...this.views(), ...this.readerAnnotators]) void v.updateProvider(p);
 	}
 
 
@@ -208,8 +213,8 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		return [];
 	}
 
-	/** Makes the annotation file of the document open in a view, when the format keeps its own (null: the default file) */
-	async createAnnotationFile(_view: DocumentView<Doc, R>): Promise<TFile | null> {
+	/** Makes the annotation file of the document open in a view or an embed, when the format keeps its own (null: the default file) */
+	async createAnnotationFile(_view: AnnotationTarget<Doc, R>): Promise<TFile | null> {
 		return null;
 	}
 
@@ -350,10 +355,22 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 		await this.loadSettings();
 		this.applyReaderSettings();
 		this.refreshPalette();
-		for (const v of this.views()) {
-			v.onAppearanceChanged();
-			v.refreshHighlights();
-		}
+		for (const v of this.views()) v.onAppearanceChanged();
+		this.refreshAllHighlights();
+	}
+
+	/** Draws the highlights again in every document on screen: its tabs, and the readers `annotateReader` annotates */
+	refreshAllHighlights(): void {
+		for (const v of [...this.views(), ...this.readerAnnotators]) v.refreshHighlights();
+	}
+
+	/**
+	 * Highlights in a reader outside the format's tabs (an embed, a plugin's own pane): drawn from
+	 * the notes and kept up to date, with the tab's selection and highlight menus to make and change
+	 * them (see `ReaderAnnotator`). Returns it, a component to add as a child of what shows the reader
+	 */
+	annotateReader(target: AnnotationTarget<Doc, R>, options: ReaderAnnotatorOptions): ReaderAnnotator<Doc, R> {
+		return new ReaderAnnotator(this, target, options);
 	}
 
 	async saveSettings(): Promise<void> {

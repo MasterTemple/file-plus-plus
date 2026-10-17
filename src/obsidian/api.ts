@@ -110,6 +110,11 @@ export interface AnnotationProvider<T = unknown> {
 	 * `` c => `text-decoration: underline dashed 2px ${c};` ``. Default: a background like highlights.
 	 */
 	style?: (color: string) => string;
+	/**
+	 * A long press (mobile) on its annotations selects the words under it, as on plain text, rather than
+	 * opening their menu (a tap still does): for annotations that cover a lot of text (whole verses)
+	 */
+	holdSelects?: boolean;
 	/** The annotations of a document. Called when a view opens it and on `refreshAnnotations`. */
 	annotations(file: TFile): Annotation<T>[] | Promise<Annotation<T>[]>;
 	/**

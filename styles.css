@@ -1679,3 +1679,8 @@ body.fpp-appearance-open .mobile-navbar {
 	border-color: var(--text-error);
 	color: var(--text-error);
 }
+
+/* An embed (or a plugin's pane) with the notes' highlights: its comment cards and tooltips are placed in it */
+.fpp-annotated {
+	position: relative;
+}

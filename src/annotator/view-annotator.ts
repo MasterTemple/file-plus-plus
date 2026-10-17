@@ -1,10 +1,10 @@
-import { Menu, Notice, type MenuItem, type TFile } from 'obsidian';
+import { Menu, Notice, type TFile } from 'obsidian';
 import type { DocumentReader, HighlightSpec } from '../core';
-import { ANNOTATION_MODES, type AnnotationMode, type HighlightGestureAction } from '../obsidian/settings';
+import type { AnnotationMode, HighlightGestureAction } from '../obsidian/settings';
 import type { DocumentView } from '../obsidian/view';
-import { askForComment } from './comment-modal';
 import type { HighlightEntry } from './highlight-index';
 import { stepHighlight } from './highlight-steps';
+import { addAnnotationModeRow, addHighlightItems, editHighlightComment } from './menus';
 
 /**
  * The annotator's part of a document's view: drawing the highlights (links from notes) and their
@@ -217,15 +217,7 @@ export class ViewAnnotator<Doc = unknown, R extends DocumentReader = DocumentRea
 	/** Prompt for a highlight's comment and write it into the note. */
 	async editComment(entry: HighlightEntry): Promise<void> {
 		const quote = this.view.reader?.highlightRange(entry.id)?.toString().replace(/\s+/g, ' ').trim() ?? '';
-		const comment = await askForComment(this.view.app, quote, {
-			title: entry.comment ? 'Edit comment' : 'Add comment',
-			initial: entry.comment ?? '',
-			submit: 'Save',
-			vim: this.view.plugin.settings.commentVim,
-			vimEscape: this.view.plugin.settings.commentVimEscape,
-		});
-		if (comment === null) return;
-		await this.view.plugin.annotator.setHighlightComment(entry, comment);
+		await editHighlightComment(this.view.plugin, entry, quote);
 	}
 
 	/**
@@ -233,80 +225,11 @@ export class ViewAnnotator<Doc = unknown, R extends DocumentReader = DocumentRea
 	 * one (`ann` null) the choice is kept in `pending` for this menu only.
 	 */
 	addAnnotationModeRow(menu: Menu, ann: TFile | null, section: string, pending: { mode: AnnotationMode }): void {
-		menu.addItem((item) => {
-			item.setSection(section);
-			const dom = (item as MenuItem & { dom?: HTMLElement }).dom;
-			if (!dom) return;
-			dom.empty();
-			dom.addClass('fpp-mode-row');
-			dom.setAttr('aria-label', ann ? `When copying, for ${ann.basename}` : 'When copying (Insert and Both create an annotation file)');
-			const labels: Record<AnnotationMode, string> = { copy: 'Copy', insert: 'Insert', both: 'Both' };
-			const buttons: HTMLElement[] = [];
-			const current = ann ? this.view.plugin.annotator.annotations.mode(ann) : pending.mode;
-			for (const mode of ANNOTATION_MODES) {
-				const b = dom.createDiv({ cls: 'fpp-mode-button', text: labels[mode] });
-				b.toggleClass('is-active', mode === current);
-				buttons.push(b);
-				for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend'])
-					b.addEventListener(type, (e) => e.stopPropagation());
-				b.addEventListener('click', async (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					buttons.forEach((x) => x.toggleClass('is-active', x === b));
-					if (ann) await this.view.plugin.annotator.annotations.setMode(ann, mode);
-					else pending.mode = mode;
-				});
-			}
-		});
+		addAnnotationModeRow(this.view.plugin, menu, ann, section, pending);
 	}
 
 	/** Highlight menu, in the order and with the items configured in settings. */
 	addHighlightItems(menu: Menu, entries: HighlightEntry[]): void {
-		const order = this.view.plugin.settings.highlightMenu.filter((e) => e.show).map((e) => e.id);
-		for (const entry of entries) {
-			const section = `fpp-hl-${entry.id}`;
-			const note = entry.sourcePath.split('/').pop()?.replace(/\.md$/, '') ?? entry.sourcePath;
-			if (entries.length > 1) menu.addItem((i) => (i.setTitle(`Highlight in "${note}"`) as any).setIsLabel?.(true).setSection?.(section));
-			// Picking a color recolors the highlight right away.
-			if (order.includes('color'))
-				this.view.addColorRow(menu, section, () => entry.color ?? null, (c) => {
-					this.view.setActiveColor(c);
-					void this.view.plugin.annotator.setHighlightColor(entry, c);
-					menu.hide();
-				});
-			for (const id of order) {
-				if (id === 'open') menu.addItem((i) => i.setTitle(`Open in "${note}"`).setIcon('file-text').setSection(section).onClick(() => this.view.plugin.annotator.openSource(entry, this.view)));
-				else if (id === 'comment')
-					menu.addItem((i) =>
-						i
-							.setTitle(entry.comment ? 'Edit comment' : 'Add comment')
-							.setIcon(entry.comment ? 'message-square-text' : 'message-square-plus')
-							.setSection(section)
-							.onClick(() => this.editComment(entry)),
-					);
-				else if (id === 'copy-link')
-					menu.addItem((i) =>
-						i
-							.setTitle('Copy link')
-							.setIcon('link')
-							.setSection(section)
-							.onClick(async () => {
-								await navigator.clipboard.writeText(entry.original);
-								new Notice('Copied link to clipboard');
-							}),
-					);
-				else if (id === 'delete')
-					menu.addItem((i) =>
-						i
-							.setTitle('Delete highlight')
-							.setIcon('trash-2')
-							.setWarning(true)
-							.setSection(section)
-							// Shift-click deletes without asking, even when the highlight has a comment.
-							.onClick((evt) => this.view.plugin.annotator.deleteHighlight(entry, evt.shiftKey)),
-					);
-			}
-			this.view.extendHighlightMenuFor(menu, entry, section);
-		}
+		addHighlightItems(this.view.menuHost, menu, entries);
 	}
 }

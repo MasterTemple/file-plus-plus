@@ -1,7 +1,7 @@
 import { type DocumentReader, type HighlightSpec, type LayerHit, type SelectionInfo, type TocItem } from '../core';
-import { FileView, Menu, Notice, Platform, Scope, TFile, setIcon, type HoverParent, type MenuItem, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
+import { FileView, Menu, Notice, Platform, Scope, TFile, setIcon, type HoverParent, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import type { HighlightEntry } from '../annotator/highlight-index';
-import { SELECTION_MENU_LABELS, altLinkLabel, formatMenuLabel, type AnnotationMode, type HighlightGestureAction, type LinkPlace } from './settings';
+import type { HighlightGestureAction, LinkPlace } from './settings';
 import type { CopyTarget, FilePlusPlusPlugin } from './plugin';
 import { AppearancePanel } from './appearance';
 import { Sidebar } from './sidebar';
@@ -13,6 +13,7 @@ import { layerId, type Annotation, type AnnotationContext, type AnnotationProvid
 import { hoverLink } from './hover';
 import { JumpList, type Place } from './jump-list';
 import { pickHint } from './sentence-hints';
+import { addActiveColorRow, addColorRow, addSelectionItems, colorCss, colorTitle, type MenuHost } from '../annotator/menus';
 
 /** Annotations under the pointer, grouped by their provider. */
 interface AnnotationGroup {
@@ -535,7 +536,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 					e.preventDefault();
 					return;
 				}
-				if (highlights.length || annotations.length) {
+				if (highlights.length || this.heldAnnotations(annotations).length) {
 					// Long-press on a highlight (Android fires contextmenu; the hold timer may have run already).
 					e.preventDefault();
 					if (Date.now() - this.lastHold > 1000) this.onHold(e.clientX, e.clientY);
@@ -743,6 +744,11 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		}, 320);
 	}
 
+	/** The annotations a long press opens the menu of: not those whose provider leaves it to select text (`holdSelects`) */
+	private heldAnnotations(hits: LayerHit[]): LayerHit[] {
+		return hits.filter((h) => !this.plugin.providers.get(h.layer.replace(/^provider:/, ''))?.holdSelects);
+	}
+
 	private showAnnotationMenu(hits: LayerHit[], at: { x: number; y: number }): void {
 		const menu = new Menu();
 		this.addAnnotationItems(menu, hits);
@@ -888,7 +894,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	/** A long press: when it is on a highlight, run the configured action and keep the OS selection away. */
 	private onHold(x: number, y: number): void {
 		const hits = this.reader?.highlightsAt(x, y) ?? [];
-		const annotations = hits.length ? [] : (this.reader?.layerHitsAt(x, y) ?? []);
+		const annotations = hits.length ? [] : this.heldAnnotations(this.reader?.layerHitsAt(x, y) ?? []);
 		const text = !hits.length && !annotations.length;
 		if (text && !this.onTextHold(x, y, this.reader?.shadow.elementFromPoint(x, y) ?? null)) return;
 		this.lastHold = Date.now();
@@ -1009,14 +1015,26 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	// --------------------------------------------------------------------------------------------
 
 	private colorTitle(name: string | null): DocumentFragment {
-		const frag = document.createDocumentFragment();
-		const sw = frag.createSpan({ cls: 'fpp-menu-swatch' });
-		const color = name ? this.plugin.settings.palette.find((p) => p.name === name)?.color ?? name : 'transparent';
-		sw.style.setProperty('--swatch', color);
-		if (!name) sw.addClass('fpp-swatch-none');
-		frag.appendText(name ?? 'No color');
-		return frag;
+		return colorTitle(this.plugin, name);
 	}
+
+	/** @internal (the annotator) The view as the selection and highlight menus' host (annotator/menus.ts) */
+	get menuHost(): MenuHost<Doc, R> {
+		const view = this;
+		return (this._menuHost ??= {
+			plugin: this.plugin,
+			target: this,
+			get activeColor() {
+				return view.activeColor;
+			},
+			setActiveColor: (c) => this.setActiveColor(c),
+			editComment: (entry) => this.editComment(entry),
+			openSource: (entry) => void this.plugin.annotator.openSource(entry, this),
+			extendSelectionMenu: (menu, info) => this.extendSelectionMenu(menu, info),
+			extendHighlightMenu: (menu, entry, section) => this.extendHighlightMenu(menu, entry, section),
+		});
+	}
+	private _menuHost: MenuHost<Doc, R> | null = null;
 
 	/** Remember the color picked last; it is what tapping a colored menu item uses next time. */
 	setActiveColor(color: string | null): void {
@@ -1032,56 +1050,16 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	 */
 	/** @internal (the annotator) */
 	addColorRow(menu: Menu, section: string, current: () => string | null, onPick: (color: string | null) => void): void {
-		menu.addItem((item) => {
-			item.setSection(section);
-			const dom = (item as MenuItem & { dom?: HTMLElement }).dom;
-			if (!dom) return;
-			dom.empty();
-			dom.addClass('fpp-color-row');
-			dom.setAttr('aria-label', 'Color');
-			// A mouse wheel scrolls the row sideways when it overflows.
-			dom.addEventListener(
-				'wheel',
-				(e) => {
-					if (dom.scrollWidth <= dom.clientWidth || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-					dom.scrollLeft += e.deltaY;
-					e.preventDefault();
-				},
-				{ passive: false },
-			);
-			const swatches: [string | null, HTMLElement][] = [];
-			const refresh = () => swatches.forEach(([name, sw]) => sw.toggleClass('is-active', name === current()));
-			for (const name of [...this.plugin.settings.palette.map((p) => p.name), null]) {
-				const sw = dom.createDiv({ cls: 'fpp-swatch', attr: { 'aria-label': name ?? 'No color' } });
-				sw.style.setProperty('--swatch', this.colorCss(name));
-				if (!name) sw.addClass('fpp-swatch-none');
-				swatches.push([name, sw]);
-				// Keep these events away from the menu item (and the menu) so it stays open.
-				for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend']) sw.addEventListener(type, (e) => e.stopPropagation());
-				sw.addEventListener('click', (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					onPick(name);
-					refresh();
-				});
-			}
-			refresh();
-		});
+		addColorRow(this.plugin, menu, section, current, onPick);
 	}
-
-	/** Menus that already have a row for the active color (selection and annotation items share one). */
-	private activeColorRows = new WeakSet<Menu>();
 
 	/** The color the selection / annotation items below use (the toolbar's active color). */
 	private addActiveColorRow(menu: Menu, section: string): void {
-		if (this.activeColorRows.has(menu)) return;
-		this.activeColorRows.add(menu);
-		this.addColorRow(menu, section, () => this.activeColor, (c) => this.setActiveColor(c));
+		addActiveColorRow(this.menuHost, menu, section);
 	}
 
 	private colorCss(name: string | null): string {
-		if (!name) return 'transparent';
-		return this.plugin.settings.palette.find((p) => p.name === name)?.color ?? name;
+		return colorCss(this.plugin, name);
 	}
 
 	/** @internal (the annotator) */
@@ -1098,48 +1076,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	 * under a right-clicked highlight): just a "Copy" heading and items that only copy, no color row.
 	 */
 	addSelectionItems(menu: Menu, info: SelectionInfo, isParagraph = false, copyOnly = false): void {
-		const s = this.plugin.settings;
-		const section = 'fpp-selection';
-		const label = (title: string) => menu.addItem((i) => (i.setTitle(title) as any).setIsLabel?.(true).setSection?.(section));
-		// With an annotation file, the Copy | Insert | Both row says what the items below do; otherwise they copy.
-		const ann = (!copyOnly && this.file && this.plugin.annotator.annotations.find(this.file)) || null;
-		// Without an annotation file the row starts on Copy; Insert / Both create the file when an item is picked.
-		const pending: { mode: AnnotationMode } = { mode: 'copy' };
-		if (!copyOnly) this.addActiveColorRow(menu, section);
-		if (copyOnly) label('Copy');
-		else {
-			if (isParagraph) label('Paragraph');
-			this.annotations.addAnnotationModeRow(menu, ann, section, pending);
-		}
-		const copy = (what: CopyTarget, color: string | null) => this.plugin.annotator.copy(this, info, what, color, copyOnly, ann ? undefined : pending.mode);
-		for (const entry of s.selectionMenu) {
-			if (!entry.show) continue;
-			if (entry.id === 'link') {
-				menu.addItem((i) => i.setTitle(SELECTION_MENU_LABELS.link).setIcon('link').setSection(section).onClick(() => copy('link', this.activeColor)));
-			} else if (entry.id === 'alt-link') {
-				menu.addItem((i) =>
-					i
-						.setTitle(altLinkLabel(s.linkType, this.plugin.format.linkTypeName))
-						.setIcon('link-2')
-						.setSection(section)
-						.onClick(() => copy('alt-link', this.activeColor)),
-				);
-			} else if (entry.id === 'text') {
-				menu.addItem((i) => i.setTitle(SELECTION_MENU_LABELS.text).setIcon('copy').setSection(section).onClick(() => copy('text', null)));
-			} else if (entry.id.startsWith('format:')) {
-				const fmt = s.copyFormats.find((f) => `format:${f.id}` === entry.id);
-				if (!fmt) continue;
-				const icon = this.plugin.annotator.asksForComment(fmt) ? 'message-square-quote' : fmt.name.toLowerCase().includes('callout') ? 'quote' : 'clipboard-copy';
-				menu.addItem((i) =>
-					i
-						.setTitle(`${formatMenuLabel(fmt.name)}${this.plugin.annotator.asksForComment(fmt) ? '…' : ''}`)
-						.setIcon(icon)
-						.setSection(section)
-						.onClick(() => copy(fmt, this.activeColor)),
-				);
-			}
-		}
-		if (!copyOnly) this.extendSelectionMenu(menu, info);
+		addSelectionItems(this.menuHost, menu, info, isParagraph, copyOnly);
 	}
 
 	/** Add the plugin's own items for a highlight to the highlight menu (in the highlight's `section`). */

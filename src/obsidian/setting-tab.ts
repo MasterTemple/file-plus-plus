@@ -675,7 +675,7 @@ export class FppSettingTab extends PluginSettingTab {
 					.onChange(async (v) => {
 						s.noColor = v as 'default' | 'none';
 						await save();
-						for (const view of this.plugin.views()) view.refreshHighlights();
+						this.plugin.refreshAllHighlights();
 					}),
 			);
 		new Setting(highlights.items)

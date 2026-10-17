@@ -12,3 +12,6 @@ export * from './comment-utils';
 export { askForComment, confirmDeleteHighlight } from './comment-modal';
 export { ImportModal, importHighlights, resolveBooks, type BookImportResult, type ImportModalOptions, type ImportSummary, type NotImported } from './import';
 export * from './import-utils';
+export type { AnnotationTarget } from './target';
+export { ReaderAnnotator, type ReaderAnnotatorOptions } from './reader-annotator';
+export { addColorRow, addHighlightItems, addSelectionItems, colorCss, colorTitle, editHighlightComment, type MenuHost } from './menus';

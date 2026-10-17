@@ -13,6 +13,7 @@ import { HighlightIndex, type HighlightEntry } from './highlight-index';
 import { ImportModal } from './import';
 import { NoteHistory } from './note-history';
 import { pickHint, pickSentence, pickWords, type Spot } from '../obsidian/sentence-hints';
+import type { AnnotationTarget } from './target';
 
 /**
  * The note-taking layer over the viewer: links from notes into a document are its highlights (the
@@ -310,7 +311,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	async setHighlightsHidden(hidden: boolean): Promise<void> {
 		this.plugin.settings.hideHighlights = hidden;
 		await this.plugin.saveSettings();
-		for (const v of this.plugin.views()) v.refreshHighlights();
+		this.plugin.refreshAllHighlights();
 	}
 
 	/** Show or hide comments in the margin of every open document. */
@@ -332,7 +333,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	 * Turn another plugin's annotation into a real highlight: insert it into the document's annotation
 	 * file (created if needed), as the "save as" format or, with a comment, the comment format.
 	 */
-	async saveAnnotation(view: DocumentView<Doc, R>, layerId: string, annotation: Annotation, color: string | null, withComment: boolean): Promise<void> {
+	async saveAnnotation(view: AnnotationTarget<Doc, R>, layerId: string, annotation: Annotation, color: string | null, withComment: boolean): Promise<void> {
 		const range = view.reader?.layerRange(layerId, annotation.id);
 		const info = range && view.reader?.describeRange(range);
 		if (!info || !view.file) {
@@ -373,7 +374,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	}
 
 	/** Open the note containing a highlight's link, at the link's line. */
-	async openSource(entry: HighlightEntry, fromView?: DocumentView<Doc, R>): Promise<void> {
+	async openSource(entry: HighlightEntry, fromView?: AnnotationTarget<Doc, R>): Promise<void> {
 		const file = this.plugin.app.vault.getFileByPath(entry.sourcePath);
 		if (!file) return;
 		const { workspace } = this.plugin.app;
@@ -385,12 +386,13 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			leaf.setEphemeralState(eState);
 		} else {
 			const target = this.plugin.settings.openNoteIn;
-			if (target === 'current' || Platform.isPhone || !fromView) leaf = workspace.getLeaf(Platform.isPhone ? false : 'tab');
+			const from = fromView?.leaf;
+			if (target === 'current' || Platform.isPhone || !from) leaf = workspace.getLeaf(Platform.isPhone ? false : 'tab');
 			else if (target === 'tab') leaf = workspace.getLeaf('tab');
 			else {
 				// Prefer an existing markdown leaf in another split over creating a new one.
-				const other = workspace.getLeavesOfType('markdown').find((l) => l.getRoot() === fromView.leaf.getRoot() && l.parent !== fromView.leaf.parent);
-				leaf = other ?? workspace.createLeafBySplit(fromView.leaf, 'vertical');
+				const other = workspace.getLeavesOfType('markdown').find((l) => l.getRoot() === from.getRoot() && l.parent !== from.parent);
+				leaf = other ?? workspace.createLeafBySplit(from, 'vertical');
 			}
 			await leaf.openFile(file, { active: true, eState });
 		}
@@ -482,7 +484,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	}
 
 	/** Build a link to a selection. `alternate` swaps the configured link type (the format's ↔ text fragment). */
-	buildLink(view: DocumentView<Doc, R>, info: SelectionInfo, color: string | null, alternate = false, extra: Record<string, string> = {}, updated?: Date | null): string {
+	buildLink(view: AnnotationTarget<Doc, R>, info: SelectionInfo, color: string | null, alternate = false, extra: Record<string, string> = {}, updated?: Date | null): string {
 		const useText = (this.plugin.settings.linkType === 'text') !== alternate;
 		const locator = (useText && info.textFragment()) || info.locator;
 		const alias = renderTemplate(this.plugin.settings.aliasTemplate, { ...this.templateVars(view, info, color, ''), ...extra });
@@ -511,7 +513,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		}
 	}
 
-	templateVars(view: DocumentView<Doc, R>, info: SelectionInfo, color: string | null, link: string): Record<string, string> {
+	templateVars(view: AnnotationTarget<Doc, R>, info: SelectionInfo, color: string | null, link: string): Record<string, string> {
 		const doc = view.document;
 		const meta = doc && view.file ? this.plugin.format.info(doc, view.file) : null;
 		const title = meta?.title || view.file?.basename || '';
@@ -541,7 +543,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	 * The clipboard text for a selection (synchronous, so it can run inside a `copy` event).
 	 * `extra`: more template variables, e.g. `{{label}}` when saving another plugin's annotation.
 	 */
-	renderCopy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, comment = '', extra: Record<string, string> = {}, updated?: Date | null): string {
+	renderCopy(view: AnnotationTarget<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, comment = '', extra: Record<string, string> = {}, updated?: Date | null): string {
 		if (what === 'text') return this.selectionText(info);
 		const link = this.buildLink(view, info, color, what === 'alt-link', extra, updated);
 		if (typeof what === 'string') return link;
@@ -565,7 +567,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	 * Copy (and/or insert into the annotation file, per its mode; `copyOnly` never inserts).
 	 * `newFileMode`: for a document without an annotation file, Insert / Both create one first.
 	 */
-	async copy(view: DocumentView<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, copyOnly = false, newFileMode?: AnnotationMode): Promise<void> {
+	async copy(view: AnnotationTarget<Doc, R>, info: SelectionInfo, what: CopyTarget, color: string | null, copyOnly = false, newFileMode?: AnnotationMode): Promise<void> {
 		let comment = '';
 		if (this.asksForComment(what)) {
 			const c = await askForComment(this.plugin.app, info.text, { vim: this.plugin.settings.commentVim, vimEscape: this.plugin.settings.commentVimEscape });
@@ -592,7 +594,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 		else new Notice(`Copied ${this.copyLabel(what)} to clipboard`);
 	}
 
-	async addToAnnotationFile(view: DocumentView<Doc, R>, ann: TFile, info: SelectionInfo, text: string, copied: boolean): Promise<void> {
+	async addToAnnotationFile(view: AnnotationTarget<Doc, R>, ann: TFile, info: SelectionInfo, text: string, copied: boolean): Promise<void> {
 		try {
 			const p = await this.annotations.insert(view, ann, info, text);
 			const where = `${ann.basename}${p.heading ? ` › ${p.heading}` : ''}`;
@@ -604,7 +606,7 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 	}
 
 	/** Open (or reveal) a note, preferring another split than the document's. */
-	async openNote(file: TFile, fromView?: DocumentView<Doc, R>): Promise<void> {
+	async openNote(file: TFile, fromView?: AnnotationTarget<Doc, R>): Promise<void> {
 		const { workspace } = this.plugin.app;
 		const open = workspace.getLeavesOfType('markdown').find((l) => (l.view as MarkdownView).file?.path === file.path);
 		if (open) {
@@ -612,20 +614,21 @@ export class Annotator<Doc = unknown, R extends DocumentReader = DocumentReader>
 			workspace.setActiveLeaf(open, { focus: true });
 			return;
 		}
-		const other = fromView && workspace.getLeavesOfType('markdown').find((l) => l.getRoot() === fromView.leaf.getRoot() && l.parent !== fromView.leaf.parent);
-		const leaf = Platform.isPhone || !fromView ? workspace.getLeaf('tab') : (other ?? workspace.createLeafBySplit(fromView.leaf, 'vertical'));
+		const from = fromView?.leaf;
+		const other = from && workspace.getLeavesOfType('markdown').find((l) => l.getRoot() === from.getRoot() && l.parent !== from.parent);
+		const leaf = Platform.isPhone || !from ? workspace.getLeaf('tab') : (other ?? workspace.createLeafBySplit(from, 'vertical'));
 		await leaf.openFile(file, { active: true });
 	}
 
 	/** Create (if needed) and open the annotation file of the document in `view`. */
-	async openAnnotationFile(view: DocumentView<Doc, R>): Promise<void> {
+	async openAnnotationFile(view: AnnotationTarget<Doc, R>): Promise<void> {
 		if (!view.file) return;
 		const existed = this.annotations.find(view.file);
 		try {
 			const file = existed ?? (await this.annotations.create(view));
 			if (!existed) {
 				new Notice(`Created ${file.path}`);
-				view.refreshHighlights();
+				view.refreshHighlights?.();
 			}
 			await this.openNote(file, view);
 		} catch (e) {

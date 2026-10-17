@@ -4,7 +4,7 @@ import { insertAnnotation, mergeAnnotationText, type Ordering, type Placement } 
 import { linksIn, renderTemplate, retargetLinks } from '../obsidian/link-utils';
 import type { FilePlusPlusPlugin } from '../obsidian/plugin';
 import { ANNOTATION_MODES, type AnnotationMode } from '../obsidian/settings';
-import type { DocumentView } from '../obsidian/view';
+import type { AnnotationTarget } from './target';
 import type { NoteHistory } from './note-history';
 
 /**
@@ -59,8 +59,8 @@ export class Annotations {
 		});
 	}
 
-	/** Create the annotation file for the document open in `view` (or return the existing one). */
-	async create(view: DocumentView): Promise<TFile> {
+	/** Create the annotation file for the document open in `view` (a tab or an embed; or return the existing one). */
+	async create(view: AnnotationTarget): Promise<TFile> {
 		const target = view.file!;
 		const existing = this.find(target);
 		if (existing) return existing;
@@ -101,12 +101,12 @@ export class Annotations {
 	 * How blocks of an annotation file are ordered: by the position of the first link into the format's
 	 * files in them. Text-fragment links are located in the open document (when the setting allows).
 	 */
-	ordering(view: DocumentView): Ordering<unknown> {
+	ordering(view: AnnotationTarget): Ordering<unknown> {
 		return this.orderingFor(view.file, this.plugin.settings.annotationResolveTextFragments ? view.reader : null);
 	}
 
 	/** `ordering` for a document, with or without a reader to locate text fragments in. */
-	private orderingFor(target: TFile | null, resolveText: DocumentView['reader'] | null): Ordering<unknown> {
+	private orderingFor(target: TFile | null, resolveText: AnnotationTarget['reader'] | null): Ordering<unknown> {
 		const { schemes, position } = this.format;
 		return {
 			compare: (a, b) => position.compare(a, b),
@@ -131,7 +131,7 @@ export class Annotations {
 	}
 
 	/** Insert several rendered annotations at their places in the annotation file, in one write. */
-	async insertMany(view: DocumentView, file: TFile, items: { info: SelectionInfo; block: string }[]): Promise<number> {
+	async insertMany(view: AnnotationTarget, file: TFile, items: { info: SelectionInfo; block: string }[]): Promise<number> {
 		const order = this.ordering(view);
 		const keyed = items.map((it) => ({ ...it, key: this.format.position.key(it.info.locator) })).filter((it) => it.key !== null);
 		await this.history.process(file, (data) => {
@@ -142,7 +142,7 @@ export class Annotations {
 	}
 
 	/** Insert a rendered annotation at its place in the annotation file. */
-	async insert(view: DocumentView, file: TFile, info: SelectionInfo, block: string): Promise<Placement> {
+	async insert(view: AnnotationTarget, file: TFile, info: SelectionInfo, block: string): Promise<Placement> {
 		const sel = this.format.position.key(info.locator);
 		if (sel === null) throw new Error('The selection has no position');
 		const order = this.ordering(view);
