@@ -715,15 +715,34 @@ export abstract class DocumentReader extends Emitter<ReaderEvents> {
 		return { section: sec, found };
 	}
 
+	/** Whether keys label the format's units (`unitElements`: verses) rather than sentences (`visibleSentences`) */
+	protected hintsByUnit = false;
+
+	/** The text of unit `i` that a label picks: by default `unitRange(i, i)` (a format may leave out what isn't its text, like headings) */
+	protected unitHintRange(i: number): Range | null {
+		return this.unitRange(i, i);
+	}
+
 	/**
-	 * The sentences in view, top to bottom, each with where its first line in view starts (viewport
-	 * coordinates): what keys can pick (`HintOverlay`).
+	 * The sentences in view (or the units, with `hintsByUnit`), top to bottom, each with where its
+	 * first line in view starts (viewport coordinates): what keys can pick (`HintOverlay`).
 	 */
 	visibleSentences(): { range: Range; x: number; y: number }[] {
 		if (!this.sections.length || !this.scroller.isConnected || !this.scroller.clientHeight) return [];
 		const view = this.scroller.getBoundingClientRect();
 		const { section, found } = this.elementAt(view.top);
 		const out: { range: Range; x: number; y: number }[] = [];
+		const units = this.hintsByUnit ? this.unitElements() : [];
+		if (units.length) {
+			// From the unit the top of the view is in (or the one before: it may go on into the view)
+			for (let i = Math.max(0, this.unitAt(found ?? section.body, 0) - 1); i < units.length; i++) {
+				if (units[i].getBoundingClientRect().top >= view.bottom) break;
+				const range = this.unitHintRange(i);
+				const line = range && this.lineInView(range, view);
+				if (line) out.push({ range, x: line.left, y: line.top });
+			}
+			return out;
+		}
 		const done = new Set<Element>();
 		const walker = this.doc.createTreeWalker(this.content, NodeFilter.SHOW_TEXT);
 		walker.currentNode = found ?? section.body;

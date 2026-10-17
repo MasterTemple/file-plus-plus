@@ -18,7 +18,7 @@ src/core/       no Obsidian imports
   margin.ts     Margin (`reader.margin`): notes beside the text, Google Docs style — light-DOM elements slotted into a column in the scroller, stacked without overlap; moves the text left, hides itself when too narrow
   lines.ts      line/column locators (L12C5-L14C3) for line-based formats
   sentences.ts  sentence bounds (Intl.Segmenter) and ranges: a triple click selects the sentence, a fourth the paragraph (`reader.multiClickRange`, overridable: verses)
-  hints.ts      labels over things in view that keys pick (`hintLabels`, `HintOverlay`); `reader.visibleSentences()` / `visibleWords(within?)` give what to label (`wordRanges` in sentences.ts)
+  hints.ts      labels over things in view that keys pick (`hintLabels`, `HintOverlay`); `reader.visibleSentences()` / `visibleWords(within?)` give what to label (`wordRanges` in sentences.ts); a format with units labels them instead of sentences with `hintsByUnit` (`unitHintRange(i)`: Logoxide's verses)
   note-preview.ts  footnotes in a popover over the text: hovering a note link (desktop), tapping it (touch); `isNoteLink` / `noteOf` decide what's a note
   text-index.ts, search.ts, text-fragment.ts, markdown.ts (range → Markdown), settings.ts (themes, base CSS)
 src/obsidian/    the viewer (`file-plus-plus/viewer`): knows nothing of notes
