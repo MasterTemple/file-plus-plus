@@ -150,28 +150,28 @@ export class TextIndex {
 			let fmap = new Int32Array(t.length + 16);
 			let n = 0;
 			const push = (code: number, src: number) => {
-				if (n >= codes.length) {
-					const c2 = new Uint16Array(codes.length * 2);
-					c2.set(codes);
-					codes = c2;
-					const m2 = new Int32Array(fmap.length * 2);
-					m2.set(fmap);
-					fmap = m2;
-				}
+				if (n >= codes.length) [codes, fmap] = grow(codes, fmap);
 				codes[n] = code;
 				fmap[n++] = src;
 			};
 			for (let i = 0; i < t.length; i++) {
 				const code = t.charCodeAt(i);
 				if (code < 128) {
-					push(code >= 65 && code <= 90 ? code + 32 : code, i);
+					if (n >= codes.length) [codes, fmap] = grow(codes, fmap);
+					codes[n] = code >= 65 && code <= 90 ? code + 32 : code;
+					fmap[n++] = i;
 					continue;
 				}
-				let c = t[i];
-				if (code >= 0xd800 && code <= 0xdbff && i + 1 < t.length) c = t[i] + t[i + 1];
-				const f = foldChar(c);
+				let f: string;
+				if (code >= 0xd800 && code <= 0xdbff && i + 1 < t.length) f = foldChar(t[i] + t[i + 1]);
+				else {
+					// Books repeat the same few accented letters (or a whole Greek alphabet) many times.
+					const cached = FOLDED.get(code);
+					if (cached === undefined) FOLDED.set(code, (f = foldChar(t[i])));
+					else f = cached;
+				}
 				for (let k = 0; k < f.length; k++) push(f.charCodeAt(k), i);
-				if (c.length === 2) i++;
+				if (code >= 0xd800 && code <= 0xdbff && i + 1 < t.length) i++;
 			}
 			this._folded = decodeUtf16(codes.subarray(0, n));
 			this.foldMap = fmap.slice(0, n);
@@ -279,6 +279,17 @@ export class TextIndex {
 		}
 		return this.sections[lo].sectionIndex;
 	}
+}
+
+/** Folded forms of the non-ASCII characters seen so far (`foldChar` normalizes, which is slow). */
+const FOLDED = new Map<number, string>();
+
+function grow(codes: Uint16Array<ArrayBuffer>, map: Int32Array<ArrayBuffer>): [Uint16Array<ArrayBuffer>, Int32Array<ArrayBuffer>] {
+	const c2 = new Uint16Array(codes.length * 2);
+	c2.set(codes);
+	const m2 = new Int32Array(map.length * 2);
+	m2.set(map);
+	return [c2, m2];
 }
 
 /** First index i with arr[i] >= value. */
