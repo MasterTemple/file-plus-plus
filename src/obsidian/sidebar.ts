@@ -4,6 +4,7 @@ import type { HighlightEntry } from '../annotator/highlight-index';
 import { layerId, type Annotation, type AnnotationProvider } from './api';
 import { titleCase } from './settings';
 import { hoverLink } from './hover';
+import type { DocumentInfo } from './format';
 import type { DocumentView } from './view';
 import { timeAgo } from '../annotator/margin-comments';
 
@@ -142,9 +143,11 @@ export class Sidebar {
 		}
 	}
 
-	setToc(toc: TocItem[] | null): void {
+	/** The contents of a document (null: none open), under a header naming it (with its cover). */
+	setToc(toc: TocItem[] | null, header?: DocumentInfo & { cover: Promise<string | null> | null }): void {
 		this.setKeyMode(null);
 		this.tocEl.empty();
+		this.progressEl = null;
 		this.tocItems.clear();
 		this.results = [];
 		this.view.setSearchNavVisible(false);
@@ -155,12 +158,41 @@ export class Sidebar {
 		// The query stays: the next document (or this one, drawn again) is searched for it
 		this.lastQuery = '';
 		if (!toc) return;
+		if (header) this.renderHeader(header);
 		if (!toc.length) this.tocEl.createDiv({ cls: 'fpp-empty', text: `This ${this.noun} has no table of contents.` });
 		this.renderToc(toc, this.tocEl);
 		if (this.activeTab === 'search' && this.searchInput?.value.trim()) this.runSearch();
 	}
 
 	// --- TOC -------------------------------------------------------------------------------------
+
+	private progressEl: HTMLElement | null = null;
+	private progress = 0;
+
+	private renderHeader(header: DocumentInfo & { cover: Promise<string | null> | null }): void {
+		const el = this.tocEl.createDiv('fpp-toc-header');
+		const cover = el.createDiv('fpp-toc-cover');
+		void header.cover?.then((url) => {
+			if (!url || !cover.isConnected) return;
+			const img = cover.createEl('img', { attr: { src: url, alt: '' } });
+			img.addEventListener('load', () => cover.addClass('has-image'), { once: true });
+		});
+		const text = el.createDiv('fpp-toc-header-text');
+		text.createDiv({ cls: 'fpp-toc-header-title', text: header.title });
+		if (header.author) text.createDiv({ cls: 'fpp-toc-header-author', text: header.author });
+		this.progressEl = text.createDiv('fpp-toc-header-progress');
+		this.progressEl.createDiv('fpp-toc-header-bar');
+		this.progressEl.createSpan();
+		this.setProgress(this.progress);
+	}
+
+	/** How far through the document the reader is (0 to 1), for the header. */
+	setProgress(progress: number): void {
+		this.progress = progress;
+		if (!this.progressEl) return;
+		this.progressEl.style.setProperty('--fpp-progress', String(progress));
+		(this.progressEl.lastChild as HTMLElement).setText(`${Math.round(progress * 100)}%`);
+	}
 
 	private renderToc(items: TocItem[], parent: HTMLElement): void {
 		// Entries without children line up with siblings that have a collapse arrow.

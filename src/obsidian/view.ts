@@ -40,6 +40,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 	protected toolbarEl!: HTMLElement;
 	private chapterEl!: HTMLElement;
 	private progressEl!: HTMLElement;
+	private progressBarEl!: HTMLElement;
 	private paletteEl!: HTMLElement;
 	/** @internal (the annotator) */
 	sidebar!: Sidebar;
@@ -156,6 +157,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		const center = toolbar.createDiv('fpp-toolbar-center');
 		this.chapterEl = center.createDiv('fpp-toolbar-title');
 		this.progressEl = center.createDiv('fpp-toolbar-progress');
+		// How far through the document, along the toolbar's edge (the percentage is hidden when narrow)
+		this.progressBarEl = toolbar.createDiv('fpp-progress-bar');
 		this.paletteEl = toolbar.createDiv('fpp-palette');
 		this.renderPalette();
 		this.toolbarButton(toolbar, 'search', 'Search', () => this.openSearch());
@@ -261,7 +264,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 				this.openedByLink();
 			}
 			this.chapterEl.setText(this.title());
-			this.sidebar.setToc(reader.toc);
+			this.sidebar.setToc(reader.toc, { ...format.info(doc, file), cover: format.cover?.(doc) ?? null });
 			this.refreshHighlights();
 			for (const p of this.plugin.providers.values()) void this.updateProvider(p);
 			this.onReaderReady(reader);
@@ -313,6 +316,7 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		this.reader = null;
 		this.document = null;
 		this.sidebar?.setToc(null);
+		this.progressBarEl?.style.removeProperty('--fpp-progress');
 		this.hostEl?.empty();
 	}
 
@@ -450,6 +454,8 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 			if (!this.file) return;
 			this.plugin.savePosition(this.file.path, loc.locator);
 			this.progressEl.setText(`${Math.round(loc.progress * 100)}%`);
+			this.progressBarEl.style.setProperty('--fpp-progress', String(loc.progress));
+			this.sidebar.setProgress(loc.progress);
 			this.chapterEl.setText(loc.tocItem?.label ?? this.title());
 			this.sidebar.setCurrent(loc.tocItem);
 		});

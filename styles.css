@@ -32,6 +32,24 @@
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
 }
+.fpp-toolbar {
+	position: relative;
+}
+/* Reading progress along the toolbar's bottom edge */
+.fpp-progress-bar {
+	position: absolute;
+	inset: auto 0 calc(-1 * var(--border-width)) 0;
+	height: 2px;
+	background: var(--interactive-accent);
+	opacity: 0.7;
+	transform-origin: left;
+	transform: scaleX(var(--fpp-progress, 0));
+	transition: transform 0.2s ease-out;
+	pointer-events: none;
+}
+.fpp-progress-bar:dir(rtl) {
+	transform-origin: right;
+}
 .fpp-toolbar-progress {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
@@ -134,6 +152,71 @@
 }
 
 /* TOC */
+.fpp-toc-header {
+	display: flex;
+	gap: var(--size-4-3);
+	align-items: center;
+	padding: var(--size-4-2) var(--size-4-2) var(--size-4-3);
+	margin-bottom: var(--size-4-2);
+	border-bottom: var(--border-width) solid var(--background-modifier-border);
+}
+.fpp-toc-cover {
+	display: none;
+	flex: 0 0 auto;
+	width: 52px;
+}
+.fpp-toc-cover.has-image {
+	display: block;
+}
+.fpp-toc-cover img {
+	display: block;
+	width: 100%;
+	max-height: 80px;
+	object-fit: cover;
+	border-radius: var(--radius-s);
+	box-shadow: var(--shadow-s);
+}
+.fpp-toc-header-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.fpp-toc-header-title {
+	font-weight: var(--font-semibold);
+	font-size: var(--font-ui-small);
+	line-height: 1.3;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.fpp-toc-header-author {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.fpp-toc-header-progress {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-1);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+.fpp-toc-header-bar {
+	flex: 1 1 auto;
+	height: 4px;
+	border-radius: 2px;
+	background: linear-gradient(to right, var(--interactive-accent) calc(var(--fpp-progress, 0) * 100%), var(--background-modifier-border) 0);
+}
+.fpp-toc-header-bar:dir(rtl) {
+	background: linear-gradient(to left, var(--interactive-accent) calc(var(--fpp-progress, 0) * 100%), var(--background-modifier-border) 0);
+}
 .fpp-toc-self {
 	font-size: var(--font-ui-small);
 	padding-block: 3px;

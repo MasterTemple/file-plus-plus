@@ -55,6 +55,8 @@ export interface FileFormat<Doc = unknown, R extends DocumentReader = DocumentRe
 	/** Release what `load` allocated (blob URLs…). */
 	unload(doc: Doc): void;
 	info(doc: Doc, file: TFile): DocumentInfo;
+	/** The document's cover image (a URL `unload` releases), shown atop the sidebar's contents, or null. */
+	cover?(doc: Doc): Promise<string | null>;
 	/**
 	 * A reader for the document. `preview`: the locator a hover preview or embed shows, so the
 	 * format can render only what's needed around it.
