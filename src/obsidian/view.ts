@@ -315,7 +315,10 @@ export class DocumentView<Doc = unknown, R extends DocumentReader = DocumentRead
 		if (this.document) this.plugin.format.unload(this.document);
 		this.reader = null;
 		this.document = null;
+		// The next document starts at 0% until it is scrolled (a position at its top never relocates).
+		this.sidebar?.setProgress(0);
 		this.sidebar?.setToc(null);
+		this.progressEl?.setText('');
 		this.progressBarEl?.style.removeProperty('--fpp-progress');
 		this.hostEl?.empty();
 	}

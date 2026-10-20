@@ -172,11 +172,13 @@ export class Sidebar {
 	private renderHeader(header: DocumentInfo & { cover: Promise<string | null> | null }): void {
 		const el = this.tocEl.createDiv('fpp-toc-header');
 		const cover = el.createDiv('fpp-toc-cover');
-		void header.cover?.then((url) => {
-			if (!url || !cover.isConnected) return;
-			const img = cover.createEl('img', { attr: { src: url, alt: '' } });
-			img.addEventListener('load', () => cover.addClass('has-image'), { once: true });
-		});
+		header.cover
+			?.then((url) => {
+				if (!url || !cover.isConnected) return;
+				const img = cover.createEl('img', { attr: { src: url, alt: '' } });
+				img.addEventListener('load', () => cover.addClass('has-image'), { once: true });
+			})
+			.catch((e) => console.error('file-plus-plus: cover', e));
 		const text = el.createDiv('fpp-toc-header-text');
 		text.createDiv({ cls: 'fpp-toc-header-title', text: header.title });
 		if (header.author) text.createDiv({ cls: 'fpp-toc-header-author', text: header.author });

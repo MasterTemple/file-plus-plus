@@ -519,6 +519,7 @@ export abstract class FilePlusPlusPlugin<Doc = unknown, R extends DocumentReader
 	refreshPalette(): void {
 		this.annotator.updateCalloutStyles();
 		for (const v of this.views()) v.applyPalette();
+		for (const a of this.readerAnnotators) a.target.reader?.setPalette(this.paletteRecord(), this.settings.defaultColor);
 	}
 
 	savePosition(path: string, locator: string): void {

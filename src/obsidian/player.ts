@@ -271,8 +271,10 @@ export class PlaybackFollower {
 		if (this.scrolledByHand) return;
 		const box = this.reader.scroller.getBoundingClientRect();
 		const rects = range.getClientRects();
-		const at = rects.length ? rects[0] : range.getBoundingClientRect();
-		if (at.top < box.top + box.height * 0.15 || at.top > box.top + box.height * 0.75) this.reader.scrollToRange(range, { position: 'center' });
+		const first = rects.length ? rects[0] : range.getBoundingClientRect();
+		const last = rects.length ? rects[rects.length - 1] : first;
+		// A long passage starting low runs off the bottom while it plays: its end counts too.
+		if (first.top < box.top + box.height * 0.15 || last.bottom > box.top + box.height * 0.75) this.reader.scrollToRange(range, { position: 'center' });
 	}
 
 	destroy(): void {
